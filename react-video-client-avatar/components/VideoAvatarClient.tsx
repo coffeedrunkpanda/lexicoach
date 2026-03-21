@@ -105,111 +105,111 @@ const KNOWLEDGE_PACKS: KnowledgePack[] = [
     level: "A1",
     useCase: "general",
     words: [
-      "the",
-      "be",
-      "to",
-      "of",
-      "and",
-      "a",
-      "in",
-      "that",
-      "have",
-      "i",
-      "it",
-      "for",
-      "not",
-      "on",
-      "with",
-      "he",
-      "as",
-      "you",
-      "do",
-      "at",
-      "this",
-      "but",
-      "his",
-      "by",
-      "from",
-      "they",
-      "we",
-      "say",
-      "her",
-      "she",
-      "or",
-      "an",
-      "will",
-      "my",
-      "one",
-      "all",
-      "would",
-      "there",
-      "their",
-      "what",
-      "so",
-      "up",
-      "out",
-      "if",
-      "about",
-      "who",
-      "get",
-      "which",
-      "go",
-      "me",
-      "when",
-      "make",
-      "can",
-      "like",
-      "time",
-      "no",
-      "just",
-      "him",
-      "know",
-      "take",
-      "people",
-      "into",
-      "year",
-      "your",
-      "good",
-      "some",
-      "could",
-      "them",
-      "see",
-      "other",
-      "than",
-      "then",
-      "now",
-      "look",
-      "only",
-      "come",
-      "its",
-      "over",
-      "think",
-      "also",
-      "back",
-      "after",
-      "use",
-      "two",
-      "how",
-      "our",
-      "work",
-      "first",
-      "well",
-      "way",
-      "even",
-      "new",
-      "want",
-      "because",
-      "any",
-      "these",
-      "give",
-      "day",
-      "most",
-      "us",
+      "school",
+      "teacher",
+      "student",
+      "lesson",
+      "homework",
+      "book",
+      "notebook",
+      "pencil",
+      "pen",
+      "class",
+      "language",
+      "word",
+      "sentence",
+      "question",
+      "answer",
+      "conversation",
+      "pronunciation",
+      "grammar",
+      "vocabulary",
+      "practice",
+      "improve",
+      "learn",
+      "study",
+      "read",
+      "write",
+      "speak",
+      "listen",
+      "understand",
+      "explain",
+      "describe",
+      "compare",
+      "discuss",
+      "remember",
+      "review",
+      "repeat",
+      "correct",
+      "mistake",
+      "progress",
+      "goal",
+      "confidence",
+      "clear",
+      "fluent",
+      "topic",
+      "idea",
+      "opinion",
+      "example",
+      "reason",
+      "detail",
+      "story",
+      "message",
+      "email",
+      "meeting",
+      "project",
+      "deadline",
+      "task",
+      "plan",
+      "schedule",
+      "office",
+      "team",
+      "manager",
+      "colleague",
+      "customer",
+      "service",
+      "problem",
+      "solution",
+      "change",
+      "result",
+      "success",
+      "challenge",
+      "opportunity",
+      "travel",
+      "airport",
+      "hotel",
+      "ticket",
+      "passport",
+      "station",
+      "train",
+      "bus",
+      "taxi",
+      "street",
+      "restaurant",
+      "menu",
+      "order",
+      "bill",
+      "payment",
+      "money",
+      "market",
+      "shop",
+      "price",
+      "product",
+      "family",
+      "friend",
+      "neighbor",
+      "health",
+      "doctor",
+      "medicine",
+      "exercise",
+      "hobby",
+      "music",
+      "movie",
     ],
   },
   {
     id: "from_last_session_with_tutor_en",
-    label: "From Last Tutor Session",
+    label: "From My Previous Lessons",
     level: "A1-A2",
     useCase: "tutor",
     words: [
@@ -235,34 +235,6 @@ const KNOWLEDGE_PACKS: KnowledgePack[] = [
       "goal",
     ],
   },
-  {
-    id: "suggested_by_tutor_en",
-    label: "Suggested By Tutor",
-    level: "A2",
-    useCase: "tutor",
-    words: [
-      "confident",
-      "clearly",
-      "describe",
-      "compare",
-      "opinion",
-      "advantage",
-      "challenge",
-      "solution",
-      "decide",
-      "prepare",
-      "review",
-      "feedback",
-      "conversation",
-      "situation",
-      "respond",
-      "detail",
-      "natural",
-      "fluency",
-      "connect",
-      "progress",
-    ],
-  },
 ];
 
 const KNOWLEDGE_THEMES = [
@@ -272,12 +244,16 @@ const KNOWLEDGE_THEMES = [
   "Social Conversation",
 ];
 
-const LEARNING_FOCUS_OPTIONS = [
-  "Practice my knowledge",
+const LEARNING_FOCUS_PRIMARY_OPTIONS = [
+  "Last lesson with tutor",
+  "Suggested by tutor",
+  "Other",
+];
+
+const LEARNING_FOCUS_OTHER_OPTIONS = [
   "Increase vocabulary range",
-  "Reinforce vocabulary",
   "Improve pronunciation and clarity",
-  "Build conversation confidence",
+  "Practice my knowledge",
 ];
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -323,14 +299,40 @@ export function VideoAvatarClient() {
   const [showTutorReport, setShowTutorReport] = useState(false);
   const [learningTheme, setLearningTheme] = useState(KNOWLEDGE_THEMES[0]);
   const [learningFocus, setLearningFocus] = useState(
-    LEARNING_FOCUS_OPTIONS[0],
+    LEARNING_FOCUS_PRIMARY_OPTIONS[0],
+  );
+  const [learningFocusOther, setLearningFocusOther] = useState(
+    LEARNING_FOCUS_OTHER_OPTIONS[0],
   );
   const [selectedKnowledgePackId, setSelectedKnowledgePackId] = useState(
     KNOWLEDGE_PACKS[0].id,
   );
-  const [customKnownWords, setCustomKnownWords] = useState("");
   const [targetWordsInput, setTargetWordsInput] = useState("");
   const isStartingRef = useRef(false);
+
+  const sortedKnowledgePacks = useMemo(
+    () =>
+      [...KNOWLEDGE_PACKS].sort((a, b) =>
+        a.label.localeCompare(b.label, undefined, { sensitivity: "base" }),
+      ),
+    [],
+  );
+
+  const sortedLearningFocusOtherOptions = useMemo(
+    () =>
+      [...LEARNING_FOCUS_OTHER_OPTIONS].sort((a, b) =>
+        a.localeCompare(b, undefined, { sensitivity: "base" }),
+      ),
+    [],
+  );
+
+  const sortedKnowledgeThemes = useMemo(
+    () =>
+      [...KNOWLEDGE_THEMES].sort((a, b) =>
+        a.localeCompare(b, undefined, { sensitivity: "base" }),
+      ),
+    [],
+  );
 
   // Read URL parameters on mount
   useEffect(() => {
@@ -464,13 +466,15 @@ export function VideoAvatarClient() {
   );
 
   const knowledgeWords = useMemo(() => {
-    const customWords = customKnownWords
-      .split(/[\s,]+/)
-      .map((word) => word.trim().toLowerCase())
-      .filter(Boolean);
-    const merged = [...selectedKnowledgePack.words, ...customWords];
-    return Array.from(new Set(merged)).slice(0, 30);
-  }, [selectedKnowledgePack.words, customKnownWords]);
+    const top100Pack = KNOWLEDGE_PACKS.find(
+      (pack) => pack.id === "top_100_frequent_en",
+    );
+    const merged = [
+      ...selectedKnowledgePack.words,
+      ...(top100Pack?.words || []),
+    ];
+    return Array.from(new Set(merged)).slice(0, 50);
+  }, [selectedKnowledgePack.words]);
 
   const targetWords = useMemo(() => {
     const manual = targetWordsInput
@@ -482,6 +486,11 @@ export function VideoAvatarClient() {
     }
     return knowledgeWords.slice(0, 5);
   }, [knowledgeWords, targetWordsInput]);
+
+  const effectiveLearningFocus = useMemo(
+    () => (learningFocus === "Other" ? learningFocusOther : learningFocus),
+    [learningFocus, learningFocusOther],
+  );
 
   const handleStart = async () => {
     if (isStartingRef.current || isConnected || isLoading) return;
@@ -504,7 +513,7 @@ export function VideoAvatarClient() {
       const knowledgePrompt = buildKnowledgePrompt({
         learnerLevel: "A1",
         learningTheme,
-        learningFocus,
+        learningFocus: effectiveLearningFocus,
         knownWords: knowledgeWords,
         targetWords,
       });
@@ -987,13 +996,26 @@ export function VideoAvatarClient() {
                       onChange={(e) => setSelectedKnowledgePackId(e.target.value)}
                       className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                     >
-                      {KNOWLEDGE_PACKS.map((pack) => (
+                      {sortedKnowledgePacks.map((pack) => (
                         <option key={pack.id} value={pack.id}>
-                          {pack.label} ({pack.level})
+                          {pack.label}
                         </option>
                       ))}
                     </select>
                   </label>
+
+                  <div className="rounded-lg border bg-[#fafafe] p-3 md:col-span-2">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-[#77778c]">
+                      Example
+                    </p>
+                    <p className="mt-2 text-sm text-[#55556a]">
+                      {knowledgeWords.slice(0, 20).join(", ")}
+                      {knowledgeWords.length > 20 ? ", ..." : ""}
+                    </p>
+                    <p className="mt-2 text-xs text-[#77778c]">
+                      Target words for prompt: {targetWords.join(", ")}
+                    </p>
+                  </div>
 
                   <label className="space-y-1 text-sm md:col-span-2">
                     <span className="text-[#55556a]">Learning Focus</span>
@@ -1002,7 +1024,7 @@ export function VideoAvatarClient() {
                       onChange={(e) => setLearningFocus(e.target.value)}
                       className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                     >
-                      {LEARNING_FOCUS_OPTIONS.map((focus) => (
+                      {LEARNING_FOCUS_PRIMARY_OPTIONS.map((focus) => (
                         <option key={focus} value={focus}>
                           {focus}
                         </option>
@@ -1010,33 +1032,39 @@ export function VideoAvatarClient() {
                     </select>
                   </label>
 
-                  <label className="space-y-1 text-sm md:col-span-2">
-                    <span className="text-[#55556a]">Theme</span>
-                    <select
-                      value={learningTheme}
-                      onChange={(e) => setLearningTheme(e.target.value)}
-                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    >
-                      {KNOWLEDGE_THEMES.map((theme) => (
-                        <option key={theme} value={theme}>
-                          {theme}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                  {learningFocus === "Other" && (
+                    <label className="space-y-1 text-sm md:col-span-2">
+                      <span className="text-[#55556a]">Other Focus</span>
+                      <select
+                        value={learningFocusOther}
+                        onChange={(e) => setLearningFocusOther(e.target.value)}
+                        className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      >
+                        {sortedLearningFocusOtherOptions.map((focus) => (
+                          <option key={focus} value={focus}>
+                            {focus}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
 
-                  <label className="space-y-1 text-sm md:col-span-2">
-                    <span className="text-[#55556a]">
-                      Add Custom Known Words (optional)
-                    </span>
-                    <input
-                      type="text"
-                      value={customKnownWords}
-                      onChange={(e) => setCustomKnownWords(e.target.value)}
-                      placeholder="ex: interview, teamwork, confident"
-                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    />
-                  </label>
+                  {learningFocus === "Other" && (
+                    <label className="space-y-1 text-sm md:col-span-2">
+                      <span className="text-[#55556a]">Theme</span>
+                      <select
+                        value={learningTheme}
+                        onChange={(e) => setLearningTheme(e.target.value)}
+                        className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      >
+                        {sortedKnowledgeThemes.map((theme) => (
+                          <option key={theme} value={theme}>
+                            {theme}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
 
                   <label className="space-y-1 text-sm md:col-span-2">
                     <span className="text-[#55556a]">
@@ -1052,19 +1080,6 @@ export function VideoAvatarClient() {
                   </label>
                 </div>
 
-                <div className="mt-5 rounded-lg border bg-[#fafafe] p-3">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-[#77778c]">
-                    Active Knowledge Base ({knowledgeWords.length} words)
-                  </p>
-                  <p className="mt-2 text-sm text-[#55556a]">
-                    {knowledgeWords.slice(0, 14).join(", ")}
-                    {knowledgeWords.length > 14 ? ", ..." : ""}
-                  </p>
-                  <p className="mt-2 text-xs text-[#77778c]">
-                    Target words for prompt: {targetWords.join(", ")}
-                  </p>
-                </div>
-
                 <div className="mt-5 flex items-center gap-3">
                   <button
                     onClick={handleStart}
@@ -1073,9 +1088,6 @@ export function VideoAvatarClient() {
                   >
                     {isLoading ? "Starting..." : "Practice Speaking"}
                   </button>
-                  <p className="text-xs text-[#77778c]">
-                    Backend: {backendUrl} • Profile: {profile}
-                  </p>
                 </div>
               </div>
             </div>
