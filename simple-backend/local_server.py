@@ -14,6 +14,7 @@ load_dotenv(override=True)  # Load .env file before importing core modules, over
 import json
 import threading
 import urllib.request
+from datetime import datetime
 
 from flask import Flask, request, jsonify
 from core.config import initialize_constants
@@ -45,6 +46,122 @@ def _redact_payload(obj):
     elif isinstance(obj, (list, tuple)):
         return [_redact_payload(item) for item in obj]
     return obj
+
+
+def _duration_label(messages):
+    timestamps = [
+        m.get("timestamp")
+        for m in messages
+        if isinstance(m, dict) and isinstance(m.get("timestamp"), (int, float))
+    ]
+    if len(timestamps) < 2:
+        return "under 1 second"
+    duration_ms = max(timestamps) - min(timestamps)
+    if duration_ms < 1000:
+        return "under 1 second"
+    total_seconds = int(duration_ms / 1000)
+    minutes = total_seconds // 60
+    seconds = total_seconds % 60
+    if minutes == 0:
+        return f"{seconds}s"
+    return f"{minutes}m {seconds}s"
+
+
+def _build_transcript_text(messages, agent_uid):
+    cleaned = []
+    for m in messages:
+        if not isinstance(m, dict):
+            continue
+        text = (m.get("text") or "").strip()
+        if not text:
+            continue
+        cleaned.append({
+            "uid": str(m.get("uid", "")),
+            "text": text,
+            "timestamp": m.get("timestamp")
+        })
+
+    cleaned.sort(key=lambda x: x.get("timestamp") or 0)
+
+    lines = []
+    for m in cleaned:
+        role = "agent" if agent_uid and m["uid"] == str(agent_uid) else "user"
+        lines.append(f"{role}: {m['text']}")
+    return cleaned, "\n".join(lines)
+
+
+def _call_llm_for_report(constants, transcript_text):
+    llm_url = (constants.get("LLM_URL") or "").strip()
+    if not llm_url:
+        raise ValueError("LLM_URL is not configured for report generation")
+
+    llm_model = constants.get("LLM_MODEL", "gpt-4o-mini")
+    llm_api_key = (constants.get("LLM_API_KEY") or "").strip()
+
+    system_prompt = (
+        "You are an expert CEFR language tutor evaluator. "
+        "Generate a concise structured post-session report from the transcript. "
+        "Return ONLY valid JSON. "
+        "Use these metric categories exactly: Engagement, Clarity, Conversation Flow, Speaking Confidence. "
+        "Each metric score must be an integer 1-10 with a short rationale. "
+        "Evaluate ONLY the learner/user (never evaluate the agent). "
+        "For Conversation Flow, assess learner proactiveness vs passiveness: initiative, follow-up questions, "
+        "topic development, and willingness to sustain the exchange."
+    )
+
+    user_prompt = (
+        "Analyze this conversation transcript and return JSON with this exact shape:\n"
+        "{\n"
+        '  "overview": "string",\n'
+        '  "metrics": [{"name":"Engagement|Clarity|Conversation Flow|Speaking Confidence","score":1,"rationale":"string"}],\n'
+        '  "whatWentWell": ["string"],\n'
+        '  "improvements": ["string"],\n'
+        '  "nextSessionGoals": ["string"],\n'
+        '  "evidence": ["string"]\n'
+        "}\n"
+        "Rules:\n"
+        "- Provide exactly 4 metrics, one per required category in the listed order.\n"
+        "- Keep text practical, encouraging, and specific.\n"
+        "- Ground evidence in transcript content.\n"
+        "- Keep all feedback user-centered; do not critique agent quality.\n"
+        "- For Conversation Flow, explicitly comment on learner proactiveness vs passiveness.\n\n"
+        f"Transcript:\n{transcript_text}"
+    )
+
+    payload = {
+        "model": llm_model,
+        "temperature": 0.2,
+        "response_format": {"type": "json_object"},
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+    }
+
+    req = urllib.request.Request(
+        llm_url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Content-Type": "application/json",
+            **({"Authorization": f"Bearer {llm_api_key}"} if llm_api_key else {})
+        },
+        method="POST",
+    )
+
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        raw = resp.read().decode("utf-8")
+        body = json.loads(raw)
+
+    content = (
+        body.get("choices", [{}])[0]
+        .get("message", {})
+        .get("content", "")
+    )
+    if not content:
+        raise ValueError("LLM returned empty report content")
+
+    report = json.loads(content)
+    return report
 
 
 @app.after_request
@@ -291,6 +408,55 @@ def health():
     return jsonify({"status": "ok", "service": "agora-convoai-backend"})
 
 
+@app.route('/generate-report', methods=['POST'])
+def generate_report():
+    """
+    Generate a structured tutor report from conversation transcript using LLM.
+
+    Request JSON:
+      {
+        "profile": "VIDEO",
+        "agent_uid": "100",
+        "messages": [{"uid":"101","text":"...","timestamp":123}]
+      }
+    """
+    payload = request.get_json(silent=True) or {}
+    profile = (payload.get("profile") or "VIDEO").lower()
+    messages = payload.get("messages") or []
+    agent_uid = payload.get("agent_uid")
+
+    if not isinstance(messages, list) or not messages:
+        return jsonify({"error": "messages array is required"}), 400
+
+    constants = initialize_constants(profile)
+    cleaned, transcript_text = _build_transcript_text(messages, agent_uid)
+    if not cleaned or not transcript_text.strip():
+        return jsonify({"error": "no usable transcript messages found"}), 400
+
+    user_count = len([m for m in cleaned if not (agent_uid and m["uid"] == str(agent_uid))])
+    agent_count = len(cleaned) - user_count
+
+    try:
+        llm_report = _call_llm_for_report(constants, transcript_text)
+    except Exception as e:
+        return jsonify({"error": f"llm_report_failed: {str(e)}"}), 502
+
+    response = {
+        "generatedAt": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "turns": len(cleaned),
+        "userMessages": user_count,
+        "agentMessages": agent_count,
+        "duration": _duration_label(cleaned),
+        "overview": llm_report.get("overview", ""),
+        "metrics": llm_report.get("metrics", []),
+        "whatWentWell": llm_report.get("whatWentWell", []),
+        "improvements": llm_report.get("improvements", []),
+        "nextSessionGoals": llm_report.get("nextSessionGoals", []),
+        "evidence": llm_report.get("evidence", []),
+    }
+    return jsonify(response)
+
+
 if __name__ == '__main__':
     import os
     port = int(os.environ.get('PORT', 8082))
@@ -301,6 +467,7 @@ if __name__ == '__main__':
     print("\nEndpoints:")
     print("  GET /start-agent?channel=test")
     print("  GET /hangup-agent?agent_id=xxx")
+    print("  POST /generate-report")
     print("  GET /health")
     print("\nPress CTRL+C to stop")
     print("=" * 60)

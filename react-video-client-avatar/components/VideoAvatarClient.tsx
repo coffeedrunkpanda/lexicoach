@@ -393,12 +393,14 @@ export function VideoAvatarClient() {
       progress: thymiaProgress,
       safety: thymiaSafety,
     };
-    const generatedReport = buildTutorReport(
-      transcript,
-      isAgentMessage,
-      thymiaSnapshot,
-      THYMIA_ENABLED,
-    );
+    const generatedReport =
+      (await requestTutorReportFromBackend(transcript, thymiaSnapshot)) ||
+      buildTutorReport(
+        transcript,
+        isAgentMessage,
+        thymiaSnapshot,
+        THYMIA_ENABLED,
+      );
     setTutorReport(generatedReport);
     setReportCopied(false);
     setShowTutorReport(true);
@@ -422,6 +424,59 @@ export function VideoAvatarClient() {
     if (returnUrl) {
       window.location.href = returnUrl;
       return;
+    }
+  };
+
+  const requestTutorReportFromBackend = async (
+    transcript: ConversationMessage[],
+    thymiaSnapshot: ThymiaSnapshot,
+  ): Promise<TutorReport | null> => {
+    try {
+      const response = await fetch(`${backendUrl}/generate-report`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          profile: profile.trim() || DEFAULT_PROFILE,
+          agent_uid: agentUid,
+          messages: transcript,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Report endpoint failed: ${response.status}`);
+      }
+
+      const report = await response.json();
+      const thymiaInsights = buildThymiaInsights(thymiaSnapshot, THYMIA_ENABLED);
+
+      return {
+        generatedAt: report.generatedAt || new Date().toLocaleString(),
+        overview: report.overview || "No overview provided.",
+        turns: Number(report.turns || 0),
+        userMessages: Number(report.userMessages || 0),
+        agentMessages: Number(report.agentMessages || 0),
+        duration: report.duration || "N/A",
+        metrics: Array.isArray(report.metrics) ? report.metrics : [],
+        whatWentWell: Array.isArray(report.whatWentWell)
+          ? report.whatWentWell
+          : [],
+        improvements: Array.isArray(report.improvements)
+          ? report.improvements
+          : [],
+        nextSessionGoals: Array.isArray(report.nextSessionGoals)
+          ? report.nextSessionGoals
+          : [],
+        evidence: Array.isArray(report.evidence) ? report.evidence : [],
+        thymiaInsights,
+      };
+    } catch (error) {
+      console.warn(
+        "Falling back to local report generation:",
+        error instanceof Error ? error.message : error,
+      );
+      return null;
     }
   };
 
@@ -1243,11 +1298,10 @@ function buildTutorReport(
   const userTexts = userMessages.map((m) => m.text);
   const avgUserWords = averageWordCount(userTexts);
   const uniqueUserTerms = countUniqueTerms(userTexts);
-  const balanceRatio =
-    userMessages.length > 0 ? agentMessages.length / userMessages.length : 0;
   const questionCount = userTexts.filter((text) => text.includes("?")).length;
   const longUserMessages = userTexts.filter((text) => wordCount(text) > 25).length;
   const hasUserParticipation = userMessages.length > 0;
+  const proactiveActs = questionCount + userTexts.filter((text) => wordCount(text) >= 10).length;
 
   const engagementScore = hasUserParticipation
     ? scoreClamp(4 + Math.min(4, userMessages.length) + Math.min(2, questionCount))
@@ -1256,7 +1310,7 @@ function buildTutorReport(
     ? scoreClamp(9 - longUserMessages - (avgUserWords > 20 ? 1 : 0))
     : 0;
   const conversationFlowScore = hasUserParticipation
-    ? scoreClamp(9 - Math.abs(1 - balanceRatio) * 4 - (cleaned.length < 4 ? 2 : 0))
+    ? scoreClamp(3 + Math.min(4, proactiveActs) + Math.min(3, userMessages.length))
     : 0;
 
   const metrics: AssessmentMetric[] = [
@@ -1273,7 +1327,7 @@ function buildTutorReport(
     {
       name: "Conversation Flow",
       score: conversationFlowScore,
-      rationale: `Agent/user turn ratio is ${balanceRatio.toFixed(2)} and total turns are ${cleaned.length}.`,
+      rationale: `Learner proactiveness signals: ${questionCount} questions, ${userMessages.length} turns, and ${proactiveActs} initiative acts.`,
     },
   ];
 
@@ -1295,7 +1349,7 @@ function buildTutorReport(
       ? "No learner speech detected, so confidence is scored as 0."
       : thymiaInsights?.confidencePct != null
         ? `Thymia confidence signal is ${formatPercent(thymiaInsights.confidencePct)} with safety alert "${thymiaInsights.safetyAlert ?? "none"}".`
-        : "Confidence estimated from participation, clarity, and turn balance (Thymia signal unavailable).",
+        : "Confidence estimated from learner participation, clarity, and proactiveness (Thymia signal unavailable).",
   });
 
   const overallScore = Math.round(
@@ -1326,8 +1380,8 @@ function buildTutorReport(
   if (longUserMessages > 0) {
     improvements.push("Break long responses into shorter ideas for better clarity.");
   }
-  if (Math.abs(1 - balanceRatio) > 0.6) {
-    improvements.push("Improve turn balance so the learner contributes more evenly.");
+  if (questionCount === 0 || proactiveActs < 2) {
+    improvements.push("Increase learner proactiveness by asking follow-up questions and expanding responses.");
   }
   if (
     thymiaInsights?.stressPct != null &&
