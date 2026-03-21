@@ -45,6 +45,32 @@ const SENSITIVE_KEYS = [
   "ticket",
 ];
 
+type ConversationMessage = {
+  uid: string;
+  text: string;
+  timestamp?: number;
+};
+
+type AssessmentMetric = {
+  name: string;
+  score: number;
+  rationale: string;
+};
+
+type TutorReport = {
+  generatedAt: string;
+  overview: string;
+  turns: number;
+  userMessages: number;
+  agentMessages: number;
+  duration: string;
+  metrics: AssessmentMetric[];
+  whatWentWell: string[];
+  improvements: string[];
+  nextSessionGoals: string[];
+  evidence: string[];
+};
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function redactSensitiveFields(obj: any): any {
   if (typeof obj !== "object" || obj === null) return obj;
@@ -85,6 +111,9 @@ export function VideoAvatarClient() {
   );
   const [sessionAgentId, setSessionAgentId] = useState<string | null>(null);
   const [sessionPayload, setSessionPayload] = useState<object | null>(null);
+  const [tutorReport, setTutorReport] = useState<TutorReport | null>(null);
+  const [reportCopied, setReportCopied] = useState(false);
+  const [showTutorReport, setShowTutorReport] = useState(false);
 
   // Read URL parameters on mount
   useEffect(() => {
@@ -219,6 +248,8 @@ export function VideoAvatarClient() {
 
   const handleStart = async () => {
     setIsLoading(true);
+    setReportCopied(false);
+    setShowTutorReport(false);
     try {
       // Build query params for backend
       const params = new URLSearchParams();
@@ -328,6 +359,19 @@ export function VideoAvatarClient() {
   }, [autoConnect]);
 
   const handleStop = async () => {
+    const transcript: ConversationMessage[] = [...messageList];
+    if (currentInProgressMessage?.text?.trim()) {
+      transcript.push({
+        uid: currentInProgressMessage.uid,
+        text: currentInProgressMessage.text,
+        timestamp: currentInProgressMessage.timestamp,
+      });
+    }
+    const generatedReport = buildTutorReport(transcript, isAgentMessage);
+    setTutorReport(generatedReport);
+    setReportCopied(false);
+    setShowTutorReport(true);
+
     // Stop and close local video track to release camera hardware
     if (localVideoTrack) {
       localVideoTrack.stop();
@@ -338,6 +382,12 @@ export function VideoAvatarClient() {
     await leaveChannel();
     setSessionAgentId(null);
     setSessionPayload(null);
+    if (generatedReport && typeof window !== "undefined") {
+      window.sessionStorage.setItem(
+        "last_avatar_call_report",
+        JSON.stringify(generatedReport),
+      );
+    }
     if (returnUrl) {
       window.location.href = returnUrl;
       return;
@@ -394,6 +444,38 @@ export function VideoAvatarClient() {
     return `${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}`;
   };
 
+  const copyTutorReport = async () => {
+    if (!tutorReport || typeof window === "undefined") return;
+    const lines = [
+      "Tutor Report",
+      `Generated: ${tutorReport.generatedAt}`,
+      `Overview: ${tutorReport.overview}`,
+      `Turns: ${tutorReport.turns}`,
+      `User messages: ${tutorReport.userMessages}`,
+      `Agent messages: ${tutorReport.agentMessages}`,
+      `Duration: ${tutorReport.duration}`,
+      "",
+      "Assessment:",
+      ...tutorReport.metrics.map(
+        (m) => `- ${m.name}: ${m.score}/10 (${m.rationale})`,
+      ),
+      "",
+      "What Went Well:",
+      ...tutorReport.whatWentWell.map((item) => `- ${item}`),
+      "",
+      "What Can Be Improved:",
+      ...tutorReport.improvements.map((item) => `- ${item}`),
+      "",
+      "Next Session Goals:",
+      ...tutorReport.nextSessionGoals.map((item) => `- ${item}`),
+      "",
+      "Evidence:",
+      ...tutorReport.evidence.map((item) => `- ${item}`),
+    ];
+    await navigator.clipboard.writeText(lines.join("\n"));
+    setReportCopied(true);
+  };
+
   return (
     <div className="flex h-screen flex-col bg-background overflow-hidden">
       {/* Header */}
@@ -424,89 +506,207 @@ export function VideoAvatarClient() {
       {/* Main Content */}
       <main className="flex flex-1 px-4 py-1 md:py-6 min-h-0 overflow-hidden min-w-0">
         {!isConnected ? (
-          /* Connection Form - Centered (same as original) */
-          <div className="flex flex-1 items-center justify-center">
-            {autoConnect || isLoading ? (
-              <p className="text-lg text-muted-foreground animate-pulse">
-                Connecting...
-              </p>
-            ) : (
-              <div className="w-full max-w-md rounded-lg border bg-card p-6 shadow-lg">
-                <h2 className="mb-4 text-lg font-semibold">Connect to Agent</h2>
-                <div className="space-y-4">
+          showTutorReport && tutorReport ? (
+            <div className="flex flex-1 justify-center overflow-auto">
+              <div className="w-full max-w-5xl rounded-lg border bg-card p-6 shadow-lg space-y-6">
+                <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <label
-                      htmlFor="backend"
-                      className="mb-2 block text-sm font-medium"
-                    >
-                      Backend URL
-                    </label>
-                    <input
-                      id="backend"
-                      type="text"
-                      value={backendUrl}
-                      onChange={(e) => setBackendUrl(e.target.value)}
-                      placeholder={DEFAULT_BACKEND_URL}
-                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                    />
-                  </div>
-
-                  <div>
-                    <label
-                      htmlFor="profile"
-                      className="mb-2 block text-sm font-medium"
-                    >
-                      Server Profile
-                    </label>
-                    <input
-                      id="profile"
-                      type="text"
-                      value={profile}
-                      onChange={(e) => setProfile(e.target.value)}
-                      placeholder={DEFAULT_PROFILE}
-                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                    />
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Leave empty for default &ldquo;{DEFAULT_PROFILE}&rdquo;
-                      profile
+                    <h2 className="text-2xl font-semibold">Tutor Report</h2>
+                    <p className="text-sm text-muted-foreground">
+                      {tutorReport.generatedAt} • {tutorReport.duration} •{" "}
+                      {tutorReport.turns} turns
                     </p>
                   </div>
-
-                  <div className="space-y-2">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={enableLocalVideo}
-                        onChange={(e) => setEnableLocalVideo(e.target.checked)}
-                        className="h-4 w-4 rounded border-gray-300"
-                      />
-                      <span className="text-sm font-medium">
-                        Enable Local Video
-                      </span>
-                    </label>
-
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={enableAvatar}
-                        onChange={(e) => setEnableAvatar(e.target.checked)}
-                        className="h-4 w-4 rounded border-gray-300"
-                      />
-                      <span className="text-sm font-medium">Enable Avatar</span>
-                    </label>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={copyTutorReport}
+                      className="cursor-pointer rounded-md border px-3 py-2 text-sm hover:bg-accent"
+                    >
+                      {reportCopied ? "Copied" : "Copy Report"}
+                    </button>
+                    <button
+                      onClick={() => setShowTutorReport(false)}
+                      className="cursor-pointer rounded-md border px-3 py-2 text-sm hover:bg-accent"
+                    >
+                      Back
+                    </button>
                   </div>
+                </div>
 
+                <div className="rounded-lg border bg-muted/20 p-4">
+                  <p className="text-sm">
+                    <span className="font-semibold">Overall assessment:</span>{" "}
+                    {tutorReport.overview}
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  {tutorReport.metrics.map((metric) => (
+                    <div key={metric.name} className="rounded-lg border p-4">
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                        {metric.name}
+                      </p>
+                      <p className="text-2xl font-bold mt-1">
+                        {metric.score}
+                        <span className="text-sm text-muted-foreground"> / 10</span>
+                      </p>
+                      <p className="text-sm text-muted-foreground mt-2">
+                        {metric.rationale}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <section className="rounded-lg border p-4">
+                    <h3 className="font-semibold mb-2">What Went Well</h3>
+                    <ul className="list-disc pl-5 space-y-1 text-sm">
+                      {tutorReport.whatWentWell.map((item, idx) => (
+                        <li key={`${item}-${idx}`}>{item}</li>
+                      ))}
+                    </ul>
+                  </section>
+                  <section className="rounded-lg border p-4">
+                    <h3 className="font-semibold mb-2">What Can Be Improved</h3>
+                    <ul className="list-disc pl-5 space-y-1 text-sm">
+                      {tutorReport.improvements.map((item, idx) => (
+                        <li key={`${item}-${idx}`}>{item}</li>
+                      ))}
+                    </ul>
+                  </section>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <section className="rounded-lg border p-4">
+                    <h3 className="font-semibold mb-2">Next Session Goals</h3>
+                    <ul className="list-disc pl-5 space-y-1 text-sm">
+                      {tutorReport.nextSessionGoals.map((item, idx) => (
+                        <li key={`${item}-${idx}`}>{item}</li>
+                      ))}
+                    </ul>
+                  </section>
+                  <section className="rounded-lg border p-4">
+                    <h3 className="font-semibold mb-2">Evidence from Conversation</h3>
+                    <ul className="list-disc pl-5 space-y-1 text-sm">
+                      {tutorReport.evidence.map((item, idx) => (
+                        <li key={`${item}-${idx}`}>{item}</li>
+                      ))}
+                    </ul>
+                  </section>
+                </div>
+
+                <div className="pt-2">
                   <button
                     onClick={handleStart}
                     disabled={isLoading}
-                    className="cursor-pointer w-full rounded-lg bg-primary px-4 py-3 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                    className="cursor-pointer rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
                   >
-                    {isLoading ? "Connecting..." : "Start Call"}
+                    Start New Call
                   </button>
                 </div>
               </div>
-            )}
-          </div>
+            </div>
+          ) : (
+            <div className="flex flex-1 items-center justify-center">
+              {autoConnect || isLoading ? (
+                <p className="text-lg text-muted-foreground animate-pulse">
+                  Connecting...
+                </p>
+              ) : (
+                <div className="w-full max-w-md rounded-lg border bg-card p-6 shadow-lg">
+                  <h2 className="mb-4 text-lg font-semibold">Connect to Agent</h2>
+                  <div className="space-y-4">
+                    <div>
+                      <label
+                        htmlFor="backend"
+                        className="mb-2 block text-sm font-medium"
+                      >
+                        Backend URL
+                      </label>
+                      <input
+                        id="backend"
+                        type="text"
+                        value={backendUrl}
+                        onChange={(e) => setBackendUrl(e.target.value)}
+                        placeholder={DEFAULT_BACKEND_URL}
+                        className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                      />
+                    </div>
+
+                    <div>
+                      <label
+                        htmlFor="profile"
+                        className="mb-2 block text-sm font-medium"
+                      >
+                        Server Profile
+                      </label>
+                      <input
+                        id="profile"
+                        type="text"
+                        value={profile}
+                        onChange={(e) => setProfile(e.target.value)}
+                        placeholder={DEFAULT_PROFILE}
+                        className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                      />
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Leave empty for default &ldquo;{DEFAULT_PROFILE}&rdquo;
+                        profile
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={enableLocalVideo}
+                          onChange={(e) => setEnableLocalVideo(e.target.checked)}
+                          className="h-4 w-4 rounded border-gray-300"
+                        />
+                        <span className="text-sm font-medium">
+                          Enable Local Video
+                        </span>
+                      </label>
+
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={enableAvatar}
+                          onChange={(e) => setEnableAvatar(e.target.checked)}
+                          className="h-4 w-4 rounded border-gray-300"
+                        />
+                        <span className="text-sm font-medium">Enable Avatar</span>
+                      </label>
+                    </div>
+
+                    <button
+                      onClick={handleStart}
+                      disabled={isLoading}
+                      className="cursor-pointer w-full rounded-lg bg-primary px-4 py-3 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                    >
+                      {isLoading ? "Connecting..." : "Start Call"}
+                    </button>
+
+                    {tutorReport && (
+                      <div className="rounded-lg border bg-muted/20 p-4 space-y-2">
+                        <h3 className="text-sm font-semibold">
+                          Last tutor report ready
+                        </h3>
+                        <p className="text-xs text-muted-foreground">
+                          {tutorReport.generatedAt} • {tutorReport.duration}
+                        </p>
+                        <button
+                          onClick={() => setShowTutorReport(true)}
+                          className="cursor-pointer rounded-md border px-3 py-2 text-sm hover:bg-accent"
+                        >
+                          Open Tutor Report
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )
         ) : (
           /* Connected: Responsive Layout */
           <>
@@ -993,4 +1193,161 @@ export function VideoAvatarClient() {
       />
     </div>
   );
+}
+
+function buildTutorReport(
+  messages: ConversationMessage[],
+  isAgentMessage: (uid: string) => boolean,
+): TutorReport | null {
+  const cleaned = messages
+    .map((m) => ({ ...m, text: (m.text || "").trim() }))
+    .filter((m) => m.text.length > 0);
+
+  if (!cleaned.length) return null;
+
+  const userMessages = cleaned.filter((m) => !isAgentMessage(m.uid));
+  const agentMessages = cleaned.filter((m) => isAgentMessage(m.uid));
+
+  const timestamps = cleaned
+    .map((m) => m.timestamp)
+    .filter((ts): ts is number => typeof ts === "number");
+  const durationMs =
+    timestamps.length >= 2 ? Math.max(...timestamps) - Math.min(...timestamps) : 0;
+  const duration = formatDuration(durationMs);
+
+  const firstUser = userMessages[0]?.text;
+  const lastUser = userMessages[userMessages.length - 1]?.text;
+  const lastAgent = agentMessages[agentMessages.length - 1]?.text;
+  const userTexts = userMessages.map((m) => m.text);
+  const avgUserWords = averageWordCount(userTexts);
+  const uniqueUserTerms = countUniqueTerms(userTexts);
+  const balanceRatio =
+    userMessages.length > 0 ? agentMessages.length / userMessages.length : 0;
+  const questionCount = userTexts.filter((text) => text.includes("?")).length;
+  const longUserMessages = userTexts.filter((text) => wordCount(text) > 25).length;
+
+  const engagementScore = scoreClamp(
+    4 + Math.min(4, userMessages.length) + Math.min(2, questionCount),
+  );
+  const clarityScore = scoreClamp(9 - longUserMessages - (avgUserWords > 20 ? 1 : 0));
+  const conversationFlowScore = scoreClamp(
+    9 - Math.abs(1 - balanceRatio) * 4 - (cleaned.length < 4 ? 2 : 0),
+  );
+
+  const metrics: AssessmentMetric[] = [
+    {
+      name: "Engagement",
+      score: engagementScore,
+      rationale: `${userMessages.length} user turns and ${questionCount} user questions indicate participation.`,
+    },
+    {
+      name: "Clarity",
+      score: clarityScore,
+      rationale: `Average user message length is ${avgUserWords.toFixed(1)} words.`,
+    },
+    {
+      name: "Conversation Flow",
+      score: conversationFlowScore,
+      rationale: `Agent/user turn ratio is ${balanceRatio.toFixed(2)} and total turns are ${cleaned.length}.`,
+    },
+  ];
+
+  const overallScore = Math.round(
+    metrics.reduce((acc, metric) => acc + metric.score, 0) / metrics.length,
+  );
+
+  const whatWentWell: string[] = [];
+  if (userMessages.length >= 3) {
+    whatWentWell.push("The learner maintained a back-and-forth conversation.");
+  }
+  if (questionCount > 0) {
+    whatWentWell.push("The learner asked questions, showing curiosity and initiative.");
+  }
+  if (avgUserWords <= 20) {
+    whatWentWell.push("Most learner responses were concise and easy to follow.");
+  }
+  if (!whatWentWell.length) {
+    whatWentWell.push("The learner completed the session and produced usable speaking data.");
+  }
+
+  const improvements: string[] = [];
+  if (userMessages.length < 4) {
+    improvements.push("Increase the number of learner turns to build fluency.");
+  }
+  if (avgUserWords < 5) {
+    improvements.push("Encourage fuller responses with complete sentences.");
+  }
+  if (longUserMessages > 0) {
+    improvements.push("Break long responses into shorter ideas for better clarity.");
+  }
+  if (Math.abs(1 - balanceRatio) > 0.6) {
+    improvements.push("Improve turn balance so the learner contributes more evenly.");
+  }
+  if (!improvements.length) {
+    improvements.push("Challenge the learner with follow-up questions to deepen expression.");
+  }
+
+  const nextSessionGoals = [
+    "Target at least 6 learner turns.",
+    "Use one example + one reason in each learner response.",
+    "End with a short learner recap in their own words.",
+  ];
+
+  const evidence: string[] = [
+    `User opened with: "${truncate(firstUser || "N/A", 100)}"`,
+    `User closed with: "${truncate(lastUser || "N/A", 100)}"`,
+    `Avatar final reply: "${truncate(lastAgent || "N/A", 100)}"`,
+    `Unique learner vocabulary terms detected: ${uniqueUserTerms}`,
+  ];
+
+  return {
+    generatedAt: new Date().toLocaleString(),
+    overview: `Overall performance is ${overallScore}/10. The session showed ${cleaned.length} turns with a ${duration} interaction.`,
+    turns: cleaned.length,
+    userMessages: userMessages.length,
+    agentMessages: agentMessages.length,
+    duration,
+    metrics,
+    whatWentWell,
+    improvements,
+    nextSessionGoals,
+    evidence,
+  };
+}
+
+function formatDuration(durationMs: number): string {
+  if (!durationMs || durationMs < 1000) return "under 1 second";
+  const totalSeconds = Math.floor(durationMs / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes === 0) return `${seconds}s`;
+  return `${minutes}m ${seconds}s`;
+}
+
+function truncate(value: string, max = 120): string {
+  if (value.length <= max) return value;
+  return `${value.slice(0, max - 1)}…`;
+}
+
+function wordCount(value: string): number {
+  return value.trim().split(/\s+/).filter(Boolean).length;
+}
+
+function averageWordCount(values: string[]): number {
+  if (!values.length) return 0;
+  const total = values.reduce((acc, value) => acc + wordCount(value), 0);
+  return total / values.length;
+}
+
+function countUniqueTerms(values: string[]): number {
+  const tokens = values
+    .join(" ")
+    .toLowerCase()
+    .match(/[a-z0-9']+/g);
+  if (!tokens) return 0;
+  return new Set(tokens).size;
+}
+
+function scoreClamp(value: number): number {
+  return Math.max(1, Math.min(10, Math.round(value)));
 }
