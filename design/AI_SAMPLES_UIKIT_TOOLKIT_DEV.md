@@ -146,7 +146,7 @@ git push origin main
 - If hooks fail, fix the errors instead of bypassing them
 - ESLint errors: `cd <project-dir> && npx eslint <file>`
 - Prettier errors: `npx prettier --write <file>`
-- Commit-msg hook blocks "claude" references (case-insensitive)
+- Commit-msg hook blocks AI assistant brand-name references (case-insensitive)
 
 ### 6. Update Samples to Use Latest Changes
 
@@ -443,14 +443,14 @@ npx prettier --write <file>
 
 **What it checks**:
 
-- Blocks commits with "claude" in the message (case-insensitive)
+- Blocks commits with AI assistant brand names in the message (case-insensitive)
 - Enforces lowercase first character in commit message
 
 **Example failures**:
 
 ```bash
-git commit -m "Claude helped fix this"
-# ❌ Error: commit message must not mention Claude
+git commit -m "Codex helped fix this"
+# ❌ Error: commit message must not mention assistant brand names
 
 git commit -m "Fix bug"
 # ❌ Error: commit message should start with lowercase
@@ -565,4 +565,3 @@ done
 
 - [`AI_SAMPLES_DESIGN.md`](./AI_SAMPLES_DESIGN.md) — Architecture rationale for the three-package model
 - [`VIBE_CODING_DESIGN.md`](./VIBE_CODING_DESIGN.md) — Why vibe-coding repos flatten this architecture for AI platforms
-

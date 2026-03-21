@@ -8,14 +8,14 @@ For the agent-samples design rationale, see [`AI_SAMPLES_DESIGN.md`](./AI_SAMPLE
 
 ## Three Projects, Three Audiences
 
-| | agent-samples | vibe-coding (v0, Lovable) | agent-samples + Claude Code |
+| | agent-samples | vibe-coding (v0, Lovable) | agent-samples + Codex |
 |---|---|---|---|
 | **Who builds with it** | Developers (clone, install, code) | AI coding platforms via a single prompt | AI coding agent with full local access |
-| **Who modifies it** | The developer, in an IDE | The AI platform, in response to natural language | Claude Code, with full codebase visibility |
+| **Who modifies it** | The developer, in an IDE | The AI platform, in response to natural language | Codex, with full codebase visibility |
 | **How it's installed** | `npm install --legacy-peer-deps` | Platform imports the GitHub URL and generates a project | `npm install --legacy-peer-deps` (same as developer) |
-| **How it's customized** | Fork the repo, edit code | Tell the platform "make the mic button bigger" | Describe changes in natural language, Claude Code edits source directly |
+| **How it's customized** | Fork the repo, edit code | Tell the platform "make the mic button bigger" | Describe changes in natural language, Codex edits source directly |
 
-The vibe-coding repos exist because **v0 and Lovable have platform constraints** (no GitHub package installs, no node_modules visibility, sandboxed builds) that agent-samples' three-package model doesn't accommodate. Claude Code has none of these constraints — it works directly with the agent-samples codebase, can read into node_modules, and can install any package. This makes Claude Code the most capable AI coding approach for agent-samples.
+The vibe-coding repos exist because **v0 and Lovable have platform constraints** (no GitHub package installs, no node_modules visibility, sandboxed builds) that agent-samples' three-package model doesn't accommodate. Codex has none of these constraints — it works directly with the agent-samples codebase, can read into node_modules, and can install any package. This makes Codex the most capable AI coding approach for agent-samples.
 
 ---
 
@@ -29,7 +29,7 @@ The key point for vibe-coding: even agent-samples doesn't use ui-kit for buttons
 
 ## Why Vibe-Coding Flattens Everything
 
-Vibe-coding takes the agent-samples "shadcn for generic UI" principle further: **when the AI platform is the developer, even domain-specific components should be generated locally**. These constraints are specific to v0 and Lovable — Claude Code working with agent-samples directly does not have them.
+Vibe-coding takes the agent-samples "shadcn for generic UI" principle further: **when the AI platform is the developer, even domain-specific components should be generated locally**. These constraints are specific to v0 and Lovable — Codex working with agent-samples directly does not have them.
 
 ### 1. Package hosting: GitHub refs don't work on AI platforms
 
@@ -134,7 +134,7 @@ Vibe-coding drops even the domain components because:
 2. The AI platform can't see into node_modules (so it can't debug them)
 3. The AI platform can generate them (so they're not saving effort)
 
-With the toolkit now on npm, #1 is partially resolved. But #2 and #3 still apply for v0/Lovable. Note that Claude Code has none of these constraints — it can install any package, read into node_modules, and understand the abstractions.
+With the toolkit now on npm, #1 is partially resolved. But #2 and #3 still apply for v0/Lovable. Note that Codex has none of these constraints — it can install any package, read into node_modules, and understand the abstractions.
 
 ---
 
@@ -214,7 +214,7 @@ The toolkit is now published on npm as `agora-agent-client-toolkit`. If `@agora/
 | **AI generates UI better from source** | **Remains** — platforms work better with code they own |
 | **Deno token gen** | **Unrelated** — token gen is server-side, toolkit is client-side |
 
-The toolkit being on npm makes it *possible* to use it on v0/Lovable, but the black-box and AI-modifiability arguments still favor inline code for those platforms. Claude Code is the exception — it can use the three-package model directly since it has full filesystem access and can read package internals.
+The toolkit being on npm makes it *possible* to use it on v0/Lovable, but the black-box and AI-modifiability arguments still favor inline code for those platforms. Codex is the exception — it can use the three-package model directly since it has full filesystem access and can read package internals.
 
 ---
 
@@ -270,7 +270,7 @@ Key payload choices:
 
 **Consolidate with AI_SAMPLES_DESIGN.md** — This document and `AI_SAMPLES_DESIGN.md` both describe the three-package model and shadcn philosophy from different perspectives. If the vibe-coding repos stabilize, these could merge into a single design doc with an "AI Platform Constraints" section.
 
-**Claude Code as primary AI workflow** — With Claude Code, developers get the benefits of AI-assisted coding (natural language modifications, automated debugging) without the platform constraints that drove the vibe-coding design. Agent-samples + Claude Code may reduce the need for separate vibe-coding repos over time.
+**Codex as primary AI workflow** — With Codex, developers get the benefits of AI-assisted coding (natural language modifications, automated debugging) without the platform constraints that drove the vibe-coding design. Agent-samples + Codex may reduce the need for separate vibe-coding repos over time.
 
 **Publish ui-kit to npm** — The toolkit is now on npm as `agora-agent-client-toolkit`. If the ui-kit is also published, constraint #1 fully disappears for both packages. The vibe-coding repos would still be justified by constraints #2 and #3, but the gap narrows further.
 

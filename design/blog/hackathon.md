@@ -12,9 +12,9 @@ Everything runs on [Agora's Conversational AI platform](https://docs.agora.io/en
 
 You don't need to write code. Pick the tool you're comfortable with:
 
-### Claude Code (Local, Most Capable)
+### Codex (Local, Most Capable)
 
-[Claude Code](https://docs.anthropic.com/en/docs/claude-code) is Anthropic's CLI coding assistant. It runs in your terminal, reads the repo's instructions, and handles everything — cloning, dependencies, configuration, running servers.
+[Codex](https://platform.openai.com/docs/codex) is OpenAI's coding assistant. It runs locally, reads the repo's instructions, and handles everything — cloning, dependencies, configuration, running servers.
 
 ```
 Clone https://github.com/AgoraIO-Conversational-AI/agent-samples
@@ -30,16 +30,13 @@ and then I want to run the Video AI Agent with Avatar Sample here
 on my laptop. Be sure to read the AGENT.md before you begin building.
 ```
 
-Claude Code reads `AGENT.md` (a guide written specifically for AI coding assistants), installs dependencies, asks for your API keys, configures `.env`, and starts both servers. Within minutes you have a working agent in your browser.
+Codex reads `AGENT.md` (a guide written specifically for AI coding assistants), installs dependencies, asks for your API keys, configures `.env`, and starts both servers. Within minutes you have a working agent in your browser.
 
-**Install Claude Code:**
+**Install Codex:**
 
 ```bash
-# Mac
-curl -fsSL https://claude.ai/install.sh | bash
-
-# Windows (PowerShell)
-irm https://claude.ai/install.ps1 | iex
+# Follow the official Codex setup guide:
+# https://platform.openai.com/docs/codex
 ```
 
 ### Lovable (Browser, Zero Local Setup)
@@ -66,7 +63,7 @@ and read AGENT.md then set it up
 
 ### Why Different Repos?
 
-Lovable and v0 have platform constraints (no GitHub package installs, can't read into `node_modules`, sandboxed builds) so they need self-contained repos with all code inlined. Claude Code has no such limitations — it works directly with agent-samples' full architecture.
+Lovable and v0 have platform constraints (no GitHub package installs, can't read into `node_modules`, sandboxed builds) so they need self-contained repos with all code inlined. Codex has no such limitations — it works directly with agent-samples' full architecture.
 
 ## What You'll Need
 
@@ -233,17 +230,17 @@ With Agora + Anam + Thymia as your foundation, here are starting points:
 
 ## Terminal Basics (If You're New)
 
-If you're using Claude Code and are new to the terminal, here's all you need:
+If you're using Codex and are new to the terminal, here's all you need:
 
 ```bash
 pwd                    # Where am I?
 ls                     # What's in this folder?
 cd Projects            # Go into a folder
 mkdir my-hackathon     # Create a new folder
-claude                 # Launch Claude Code
+codex                  # Launch Codex
 ```
 
-That's it. Once Claude Code is running, you communicate in plain English.
+That's it. Once Codex is running, you communicate in plain English.
 
 ## Resources
 
@@ -256,7 +253,7 @@ That's it. Once Claude Code is running, you communicate in plain English.
 | **Thymia Recipe**             | [recipes/thymia.md](https://github.com/AgoraIO-Conversational-AI/agent-samples/blob/main/recipes/thymia.md)                  |
 | **Agora Console**             | [console.agora.io](https://console.agora.io)                                                                                 |
 | **Agora ConvoAI Docs**        | [docs.agora.io/en/conversational-ai](https://docs.agora.io/en/conversational-ai/overview/product-overview)                   |
-| **Claude Code**               | [docs.anthropic.com/en/docs/claude-code](https://docs.anthropic.com/en/docs/claude-code)                                     |
+| **Codex**                     | [platform.openai.com/docs/codex](https://platform.openai.com/docs/codex)                                                     |
 | **Anam**                      | [anam.ai](https://www.anam.ai/)                                                                                              |
 | **Thymia**                    | [thymia.ai](https://thymia.ai/)                                                                                              |
 | **OpenAI API Keys**           | [platform.openai.com](https://platform.openai.com/settings/organization/api-keys)                                            |
