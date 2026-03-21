@@ -111,6 +111,7 @@ VIDEO_TTS_SAMPLE_RATE=24000
 # ASR and AIVAD
 VIDEO_ASR_VENDOR=ares
 VIDEO_ENABLE_AIVAD=true
+VIDEO_ENABLE_SAL=true        # Optional: reduce noise sensitivity via Selective Attention Locking
 
 # Avatar settings
 VIDEO_AVATAR_VENDOR=heygen
