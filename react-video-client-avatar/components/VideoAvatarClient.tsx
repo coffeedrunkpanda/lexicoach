@@ -525,20 +525,6 @@ export function VideoAvatarClient() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-lg md:text-xl font-bold flex items-center gap-2 text-[#161622]">
-              <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-[#ff2f92] shadow-[0_6px_16px_rgba(255,47,146,0.35)]">
-                <svg
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  xmlns="http://www.w3.org/2000/svg"
-                >
-                  <path
-                    d="M12 4.5C7.03 4.5 3 7.86 3 12c0 1.9.85 3.63 2.24 4.95v2.55c0 .36.39.58.69.39l2.77-1.73c1 .35 2.11.54 3.3.54 4.97 0 9-3.36 9-7.5s-4.03-7.5-9-7.5Z"
-                    fill="white"
-                  />
-                </svg>
-              </span>
               <span>LexiCoach</span>
             </h1>
             <p className="text-xs md:text-sm text-[#696978] ml-10">
