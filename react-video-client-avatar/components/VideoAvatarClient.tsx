@@ -19,7 +19,6 @@ import { Message, MessageContent } from "@agora/agent-ui-kit";
 import { Response } from "@agora/agent-ui-kit";
 import { AvatarVideoDisplay, LocalVideoPreview } from "@agora/agent-ui-kit";
 import { VideoGrid, MobileTabs } from "@agora/agent-ui-kit";
-import { AgoraLogo } from "@agora/agent-ui-kit";
 import { SettingsDialog } from "@agora/agent-ui-kit";
 import { ShenPanel } from "@agora/agent-ui-kit";
 import { ThymiaPanel, useThymia } from "@agora/agent-ui-kit/thymia";
@@ -108,21 +107,20 @@ function redactSensitiveFields(obj: any): any {
 }
 
 export function VideoAvatarClient() {
-  const [backendUrl, setBackendUrl] = useState(DEFAULT_BACKEND_URL);
+  const backendUrl = DEFAULT_BACKEND_URL;
   const [agentId, setAgentId] = useState<string | undefined>(undefined);
   const [isLoading, setIsLoading] = useState(false);
   const [chatMessage, setChatMessage] = useState("");
-  const [enableLocalVideo, setEnableLocalVideo] = useState(true);
-  const [enableAvatar, setEnableAvatar] = useState(true);
+  const enableLocalVideo = true;
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [enableAivad, setEnableAivad] = useState(true);
   const [language, setLanguage] = useState("en-US");
-  const [profile, setProfile] = useState("");
+  const profile = DEFAULT_PROFILE;
   const [prompt, setPrompt] = useState("");
   const [greeting, setGreeting] = useState("");
   const [activeTab, setActiveTab] = useState("video");
   const _conversationRef = useRef<HTMLDivElement>(null);
-  const [autoConnect, setAutoConnect] = useState(false);
+  const [autoConnect, setAutoConnect] = useState(true);
   const [returnUrl, setReturnUrl] = useState<string | null>(null);
   const channelRef = useRef<string | null>(null);
   const [selectedMic, setSelectedMic] = useState(() =>
@@ -135,18 +133,12 @@ export function VideoAvatarClient() {
   const [tutorReport, setTutorReport] = useState<TutorReport | null>(null);
   const [reportCopied, setReportCopied] = useState(false);
   const [showTutorReport, setShowTutorReport] = useState(false);
+  const isStartingRef = useRef(false);
 
   // Read URL parameters on mount
   useEffect(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
-      const urlProfile = params.get("profile");
-      if (urlProfile) {
-        setProfile(urlProfile);
-      }
-      if (params.get("autoconnect") === "true") {
-        setAutoConnect(true);
-      }
       const ru = params.get("returnurl");
       if (ru) {
         setReturnUrl(ru);
@@ -268,6 +260,8 @@ export function VideoAvatarClient() {
   const [isLocalVideoActive, setIsLocalVideoActive] = useState(false);
 
   const handleStart = async () => {
+    if (isStartingRef.current || isConnected || isLoading) return;
+    isStartingRef.current = true;
     setIsLoading(true);
     setReportCopied(false);
     setShowTutorReport(false);
@@ -275,12 +269,8 @@ export function VideoAvatarClient() {
       // Build query params for backend
       const params = new URLSearchParams();
 
-      // Add profile override if provided, otherwise use default "VIDEO" profile
-      if (profile.trim()) {
-        params.append("profile", profile.trim());
-      } else {
-        params.append("profile", DEFAULT_PROFILE);
-      }
+      // Use fixed server profile
+      params.append("profile", profile);
 
       // Add agent settings
       params.append("enable_aivad", enableAivad.toString());
@@ -319,11 +309,18 @@ export function VideoAvatarClient() {
       });
 
       // Auto-enable local video if checkbox was checked
-      if (enableLocalVideo && rtcClientRef.current) {
+      if (enableLocalVideo && rtcClientRef.current && !localVideoTrack) {
         const videoTrack = await AgoraRTC.createCameraVideoTrack({
           encoderConfig: "720p_2",
         });
-        await rtcClientRef.current.publish(videoTrack);
+        try {
+          await rtcClientRef.current.publish(videoTrack);
+        } catch (e) {
+          const err = e as { code?: string; message?: string };
+          if (err?.code !== "CAN_NOT_PUBLISH_MULTIPLE_VIDEO_TRACKS") {
+            throw e;
+          }
+        }
         setLocalVideoTrack(videoTrack);
         setIsLocalVideoActive(true);
       }
@@ -368,6 +365,7 @@ export function VideoAvatarClient() {
       );
     } finally {
       setIsLoading(false);
+      isStartingRef.current = false;
     }
   };
 
@@ -521,17 +519,30 @@ export function VideoAvatarClient() {
   };
 
   return (
-    <div className="flex h-screen flex-col bg-background overflow-hidden">
+    <div className="flex h-screen flex-col bg-[#f6f6fb] overflow-hidden">
       {/* Header */}
-      <header className="flex-shrink-0 px-4 py-3 md:py-4">
+      <header className="flex-shrink-0 px-4 py-3 md:py-4 border-b border-[#ececf4] bg-white/90 backdrop-blur-sm">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-lg md:text-xl font-bold flex items-center gap-2">
-              <AgoraLogo size={28} />
-              <span className="hidden md:inline">Agora Convo AI </span>Video Agent
+            <h1 className="text-lg md:text-xl font-bold flex items-center gap-2 text-[#161622]">
+              <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-[#ff2f92] shadow-[0_6px_16px_rgba(255,47,146,0.35)]">
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    d="M12 4.5C7.03 4.5 3 7.86 3 12c0 1.9.85 3.63 2.24 4.95v2.55c0 .36.39.58.69.39l2.77-1.73c1 .35 2.11.54 3.3.54 4.97 0 9-3.36 9-7.5s-4.03-7.5-9-7.5Z"
+                    fill="white"
+                  />
+                </svg>
+              </span>
+              <span>LexiCoach</span>
             </h1>
-            <p className="text-xs md:text-sm text-muted-foreground ml-10">
-              React with Agora AI UIKit - Video + Avatar
+            <p className="text-xs md:text-sm text-[#696978] ml-10">
+              Your speaking tutor with confidence coaching
             </p>
           </div>
           <div className="flex items-center gap-1">
@@ -696,100 +707,36 @@ export function VideoAvatarClient() {
           ) : (
             <div className="flex flex-1 items-center justify-center">
               {autoConnect || isLoading ? (
-                <p className="text-lg text-muted-foreground animate-pulse">
-                  Connecting...
-                </p>
+                <div className="rounded-2xl border border-[#ececf4] bg-white px-8 py-6 shadow-sm text-center">
+                  <p className="text-base font-medium text-[#272738]">
+                    Starting your LexiCoach session...
+                  </p>
+                  <p className="mt-2 text-sm text-[#6d6d80] animate-pulse">
+                    Connecting to {backendUrl} with profile {profile}
+                  </p>
+                </div>
               ) : (
-                <div className="w-full max-w-md rounded-lg border bg-card p-6 shadow-lg">
-                  <h2 className="mb-4 text-lg font-semibold">Connect to Agent</h2>
-                  <div className="space-y-4">
-                    <div>
-                      <label
-                        htmlFor="backend"
-                        className="mb-2 block text-sm font-medium"
+                <div className="rounded-2xl border border-[#ececf4] bg-white px-8 py-6 shadow-sm text-center">
+                  <p className="text-sm text-[#6d6d80]">
+                    Session disconnected.
+                  </p>
+                  <button
+                    onClick={handleStart}
+                    disabled={isLoading}
+                    className="mt-3 cursor-pointer rounded-xl bg-[#ff2f92] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#e32a83] disabled:opacity-50 shadow-[0_10px_24px_rgba(255,47,146,0.3)]"
+                  >
+                    Reconnect
+                  </button>
+                  {tutorReport && (
+                    <div className="mt-4">
+                      <button
+                        onClick={() => setShowTutorReport(true)}
+                        className="cursor-pointer rounded-md border border-[#e7b8d1] px-3 py-2 text-sm hover:bg-[#ffe7f4] text-[#7a2d5a]"
                       >
-                        Backend URL
-                      </label>
-                      <input
-                        id="backend"
-                        type="text"
-                        value={backendUrl}
-                        onChange={(e) => setBackendUrl(e.target.value)}
-                        placeholder={DEFAULT_BACKEND_URL}
-                        className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                      />
+                        Open Tutor Report
+                      </button>
                     </div>
-
-                    <div>
-                      <label
-                        htmlFor="profile"
-                        className="mb-2 block text-sm font-medium"
-                      >
-                        Server Profile
-                      </label>
-                      <input
-                        id="profile"
-                        type="text"
-                        value={profile}
-                        onChange={(e) => setProfile(e.target.value)}
-                        placeholder={DEFAULT_PROFILE}
-                        className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                      />
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Leave empty for default &ldquo;{DEFAULT_PROFILE}&rdquo;
-                        profile
-                      </p>
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={enableLocalVideo}
-                          onChange={(e) => setEnableLocalVideo(e.target.checked)}
-                          className="h-4 w-4 rounded border-gray-300"
-                        />
-                        <span className="text-sm font-medium">
-                          Enable Local Video
-                        </span>
-                      </label>
-
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={enableAvatar}
-                          onChange={(e) => setEnableAvatar(e.target.checked)}
-                          className="h-4 w-4 rounded border-gray-300"
-                        />
-                        <span className="text-sm font-medium">Enable Avatar</span>
-                      </label>
-                    </div>
-
-                    <button
-                      onClick={handleStart}
-                      disabled={isLoading}
-                      className="cursor-pointer w-full rounded-lg bg-primary px-4 py-3 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-                    >
-                      {isLoading ? "Connecting..." : "Start Call"}
-                    </button>
-
-                    {tutorReport && (
-                      <div className="rounded-lg border bg-muted/20 p-4 space-y-2">
-                        <h3 className="text-sm font-semibold">
-                          Last tutor report ready
-                        </h3>
-                        <p className="text-xs text-muted-foreground">
-                          {tutorReport.generatedAt} • {tutorReport.duration}
-                        </p>
-                        <button
-                          onClick={() => setShowTutorReport(true)}
-                          className="cursor-pointer rounded-md border px-3 py-2 text-sm hover:bg-accent"
-                        >
-                          Open Tutor Report
-                        </button>
-                      </div>
-                    )}
-                  </div>
+                  )}
                 </div>
               )}
             </div>
