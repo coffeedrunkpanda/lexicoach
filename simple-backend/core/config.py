@@ -3,6 +3,35 @@ Configuration and environment variable management with profile support
 """
 
 import os
+from pathlib import Path
+
+
+def load_default_prompt_from_file(profile=None):
+    """
+    Load default prompt text from tracked files in simple-backend/prompts/.
+
+    Resolution order:
+    1) prompts/<profile>_default_prompt.txt (when profile is set)
+    2) prompts/default_prompt.txt
+
+    Returns:
+        Prompt string if a non-empty file is found, otherwise None.
+    """
+    prompts_dir = Path(__file__).resolve().parent.parent / "prompts"
+    candidate_paths = []
+
+    if profile:
+        candidate_paths.append(prompts_dir / f"{profile.lower()}_default_prompt.txt")
+
+    candidate_paths.append(prompts_dir / "default_prompt.txt")
+
+    for prompt_path in candidate_paths:
+        if prompt_path.exists():
+            content = prompt_path.read_text(encoding="utf-8").strip()
+            if content:
+                return content
+
+    return None
 
 
 def get_env_var(var_name, profile=None, default_value=None):
@@ -45,6 +74,17 @@ def initialize_constants(profile=None):
     Returns:
         Dictionary of constants
     """
+    default_prompt_from_file = load_default_prompt_from_file(profile)
+    default_prompt_from_env = get_env_var('DEFAULT_PROMPT', profile)
+    resolved_default_prompt = (
+        default_prompt_from_file or
+        default_prompt_from_env or
+        "You are a virtual companion. The user can both talk and type to you and you will be sent text. "
+        "Say you can hear them if asked. They can also see you as a digital human. "
+        "Keep responses to around 10 to 20 words or shorter. Be upbeat and try and keep conversation "
+        "going by learning more about the user."
+    )
+
     constants = {
         # Store profile name for debugging/logging
         "PROFILE_NAME": profile if profile else "default",
@@ -165,11 +205,7 @@ def initialize_constants(profile=None):
         "MCP_SERVERS": get_env_var('MCP_SERVERS', profile),
 
         # Default prompt and messages
-        "DEFAULT_PROMPT": get_env_var('DEFAULT_PROMPT', profile,
-            "You are a virtual companion. The user can both talk and type to you and you will be sent text. "
-            "Say you can hear them if asked. They can also see you as a digital human. "
-            "Keep responses to around 10 to 20 words or shorter. Be upbeat and try and keep conversation "
-            "going by learning more about the user."),
+        "DEFAULT_PROMPT": resolved_default_prompt,
         "DEFAULT_GREETING": get_env_var('DEFAULT_GREETING', profile, "hi there"),
         "DEFAULT_FAILURE_MESSAGE": get_env_var('DEFAULT_FAILURE_MESSAGE', profile, "Sorry, something went wrong"),
     }

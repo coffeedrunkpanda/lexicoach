@@ -149,6 +149,23 @@ Both clients have a "Server Profile" field to override the default profile. Leav
 
 **Profile names are case-insensitive** - the server normalizes all profile names to lowercase, so `VOICE`, `voice`, or `Voice` all work identically.
 
+### Version-Controlled Prompts (Recommended)
+
+To keep prompts tracked in git (instead of `.env`), place prompt files under `simple-backend/prompts/`.
+
+- Profile-specific prompt: `simple-backend/prompts/<profile>_default_prompt.txt`
+- Fallback prompt: `simple-backend/prompts/default_prompt.txt`
+
+For example, the `VIDEO` profile automatically uses:
+
+- `simple-backend/prompts/video_default_prompt.txt`
+
+Resolution order for `DEFAULT_PROMPT`:
+
+1. Prompt file in `simple-backend/prompts/`
+2. `*_DEFAULT_PROMPT` in `.env`
+3. Built-in backend fallback prompt
+
 ### For AI Coding Assistants
 
 When setting up the `.env` file:
