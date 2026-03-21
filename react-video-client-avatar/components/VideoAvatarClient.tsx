@@ -69,6 +69,27 @@ type TutorReport = {
   improvements: string[];
   nextSessionGoals: string[];
   evidence: string[];
+  thymiaInsights?: {
+    confidencePct: number | null;
+    stressPct: number | null;
+    fatiguePct: number | null;
+    distressPct: number | null;
+    safetyAlert: string | null;
+    speechSeconds: number;
+    triggerSeconds: number;
+    summary: string;
+  };
+};
+
+type ThymiaSnapshot = {
+  biomarkers: Record<string, number | null>;
+  wellness: Record<string, number | null>;
+  clinical: Record<string, number | null>;
+  progress: Record<
+    string,
+    { speech_seconds: number; trigger_seconds: number; processing: boolean }
+  >;
+  safety: Record<string, unknown>;
 };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -367,7 +388,19 @@ export function VideoAvatarClient() {
         timestamp: currentInProgressMessage.timestamp,
       });
     }
-    const generatedReport = buildTutorReport(transcript, isAgentMessage);
+    const thymiaSnapshot: ThymiaSnapshot = {
+      biomarkers,
+      wellness,
+      clinical,
+      progress: thymiaProgress,
+      safety: thymiaSafety,
+    };
+    const generatedReport = buildTutorReport(
+      transcript,
+      isAgentMessage,
+      thymiaSnapshot,
+      THYMIA_ENABLED,
+    );
     setTutorReport(generatedReport);
     setReportCopied(false);
     setShowTutorReport(true);
@@ -472,6 +505,17 @@ export function VideoAvatarClient() {
       "Evidence:",
       ...tutorReport.evidence.map((item) => `- ${item}`),
     ];
+    if (tutorReport.thymiaInsights) {
+      lines.push(
+        "",
+        "Thymia Signals:",
+        `- Confidence: ${formatPercent(tutorReport.thymiaInsights.confidencePct)}`,
+        `- Stress: ${formatPercent(tutorReport.thymiaInsights.stressPct)}`,
+        `- Fatigue: ${formatPercent(tutorReport.thymiaInsights.fatiguePct)}`,
+        `- Distress: ${formatPercent(tutorReport.thymiaInsights.distressPct)}`,
+        `- Safety alert: ${tutorReport.thymiaInsights.safetyAlert ?? "none"}`,
+      );
+    }
     await navigator.clipboard.writeText(lines.join("\n"));
     setReportCopied(true);
   };
@@ -539,6 +583,49 @@ export function VideoAvatarClient() {
                     {tutorReport.overview}
                   </p>
                 </div>
+
+                {tutorReport.thymiaInsights && (
+                  <div className="rounded-lg border p-4">
+                    <h3 className="font-semibold mb-2">
+                      Thymia Speaking Signals
+                    </h3>
+                    <p className="text-sm text-muted-foreground mb-3">
+                      {tutorReport.thymiaInsights.summary}
+                    </p>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+                      <div className="rounded border p-2">
+                        <p className="text-xs text-muted-foreground">Confidence</p>
+                        <p className="font-semibold">
+                          {formatPercent(tutorReport.thymiaInsights.confidencePct)}
+                        </p>
+                      </div>
+                      <div className="rounded border p-2">
+                        <p className="text-xs text-muted-foreground">Stress</p>
+                        <p className="font-semibold">
+                          {formatPercent(tutorReport.thymiaInsights.stressPct)}
+                        </p>
+                      </div>
+                      <div className="rounded border p-2">
+                        <p className="text-xs text-muted-foreground">Fatigue</p>
+                        <p className="font-semibold">
+                          {formatPercent(tutorReport.thymiaInsights.fatiguePct)}
+                        </p>
+                      </div>
+                      <div className="rounded border p-2">
+                        <p className="text-xs text-muted-foreground">Distress</p>
+                        <p className="font-semibold">
+                          {formatPercent(tutorReport.thymiaInsights.distressPct)}
+                        </p>
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-3">
+                      Safety alert:{" "}
+                      {tutorReport.thymiaInsights.safetyAlert ?? "none"} • Speech
+                      processed: {Math.round(tutorReport.thymiaInsights.speechSeconds)}
+                      s
+                    </p>
+                  </div>
+                )}
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   {tutorReport.metrics.map((metric) => (
@@ -1198,6 +1285,8 @@ export function VideoAvatarClient() {
 function buildTutorReport(
   messages: ConversationMessage[],
   isAgentMessage: (uid: string) => boolean,
+  thymia: ThymiaSnapshot,
+  thymiaEnabled: boolean,
 ): TutorReport | null {
   const cleaned = messages
     .map((m) => ({ ...m, text: (m.text || "").trim() }))
@@ -1225,14 +1314,17 @@ function buildTutorReport(
     userMessages.length > 0 ? agentMessages.length / userMessages.length : 0;
   const questionCount = userTexts.filter((text) => text.includes("?")).length;
   const longUserMessages = userTexts.filter((text) => wordCount(text) > 25).length;
+  const hasUserParticipation = userMessages.length > 0;
 
-  const engagementScore = scoreClamp(
-    4 + Math.min(4, userMessages.length) + Math.min(2, questionCount),
-  );
-  const clarityScore = scoreClamp(9 - longUserMessages - (avgUserWords > 20 ? 1 : 0));
-  const conversationFlowScore = scoreClamp(
-    9 - Math.abs(1 - balanceRatio) * 4 - (cleaned.length < 4 ? 2 : 0),
-  );
+  const engagementScore = hasUserParticipation
+    ? scoreClamp(4 + Math.min(4, userMessages.length) + Math.min(2, questionCount))
+    : 0;
+  const clarityScore = hasUserParticipation
+    ? scoreClamp(9 - longUserMessages - (avgUserWords > 20 ? 1 : 0))
+    : 0;
+  const conversationFlowScore = hasUserParticipation
+    ? scoreClamp(9 - Math.abs(1 - balanceRatio) * 4 - (cleaned.length < 4 ? 2 : 0))
+    : 0;
 
   const metrics: AssessmentMetric[] = [
     {
@@ -1251,6 +1343,27 @@ function buildTutorReport(
       rationale: `Agent/user turn ratio is ${balanceRatio.toFixed(2)} and total turns are ${cleaned.length}.`,
     },
   ];
+
+  const thymiaInsights = buildThymiaInsights(thymia, thymiaEnabled);
+  const estimatedConfidence = hasUserParticipation
+    ? scoreClamp((engagementScore + clarityScore + conversationFlowScore) / 3)
+    : 0;
+  const confidenceScore = !hasUserParticipation
+    ? 0
+    : scoreClamp(
+        thymiaInsights?.confidencePct != null
+          ? thymiaInsights.confidencePct / 10
+          : estimatedConfidence,
+      );
+  metrics.push({
+    name: "Speaking Confidence",
+    score: confidenceScore,
+    rationale: !hasUserParticipation
+      ? "No learner speech detected, so confidence is scored as 0."
+      : thymiaInsights?.confidencePct != null
+        ? `Thymia confidence signal is ${formatPercent(thymiaInsights.confidencePct)} with safety alert "${thymiaInsights.safetyAlert ?? "none"}".`
+        : "Confidence estimated from participation, clarity, and turn balance (Thymia signal unavailable).",
+  });
 
   const overallScore = Math.round(
     metrics.reduce((acc, metric) => acc + metric.score, 0) / metrics.length,
@@ -1283,6 +1396,22 @@ function buildTutorReport(
   if (Math.abs(1 - balanceRatio) > 0.6) {
     improvements.push("Improve turn balance so the learner contributes more evenly.");
   }
+  if (
+    thymiaInsights?.stressPct != null &&
+    thymiaInsights.stressPct >= 60
+  ) {
+    improvements.push(
+      "Introduce short breathing pauses and slower pacing to reduce speaking stress.",
+    );
+  }
+  if (
+    thymiaInsights?.confidencePct != null &&
+    thymiaInsights.confidencePct < 45
+  ) {
+    improvements.push(
+      "Use confidence scaffolds: sentence starters, rehearsal time, and positive reinforcement.",
+    );
+  }
   if (!improvements.length) {
     improvements.push("Challenge the learner with follow-up questions to deepen expression.");
   }
@@ -1299,6 +1428,11 @@ function buildTutorReport(
     `Avatar final reply: "${truncate(lastAgent || "N/A", 100)}"`,
     `Unique learner vocabulary terms detected: ${uniqueUserTerms}`,
   ];
+  if (thymiaInsights) {
+    evidence.push(
+      `Thymia signals -> confidence: ${formatPercent(thymiaInsights.confidencePct)}, stress: ${formatPercent(thymiaInsights.stressPct)}, fatigue: ${formatPercent(thymiaInsights.fatiguePct)}.`,
+    );
+  }
 
   return {
     generatedAt: new Date().toLocaleString(),
@@ -1312,6 +1446,7 @@ function buildTutorReport(
     improvements,
     nextSessionGoals,
     evidence,
+    thymiaInsights,
   };
 }
 
@@ -1327,6 +1462,120 @@ function formatDuration(durationMs: number): string {
 function truncate(value: string, max = 120): string {
   if (value.length <= max) return value;
   return `${value.slice(0, max - 1)}…`;
+}
+
+function buildThymiaInsights(
+  thymia: ThymiaSnapshot,
+  thymiaEnabled: boolean,
+): TutorReport["thymiaInsights"] | undefined {
+  if (!thymiaEnabled) return undefined;
+
+  const confidenceRaw =
+    findValue(
+      [thymia.biomarkers, thymia.wellness, thymia.clinical],
+      ["confidence", "self_confidence", "speaking_confidence"],
+    ) ??
+    invertScale(
+      findValue(
+        [thymia.biomarkers, thymia.wellness, thymia.clinical],
+        ["low_self_esteem"],
+      ),
+    );
+
+  const stressRaw = findValue(
+    [thymia.biomarkers, thymia.wellness, thymia.clinical],
+    ["stress"],
+  );
+  const fatigueRaw = findValue(
+    [thymia.biomarkers, thymia.wellness, thymia.clinical],
+    ["fatigue"],
+  );
+  const distressRaw = findValue(
+    [thymia.biomarkers, thymia.wellness, thymia.clinical],
+    ["distress"],
+  );
+
+  const progressEntries = Object.values(thymia.progress || {});
+  const speechSeconds = progressEntries.reduce(
+    (sum, item) => sum + (item?.speech_seconds || 0),
+    0,
+  );
+  const triggerSeconds = progressEntries.reduce(
+    (sum, item) => sum + (item?.trigger_seconds || 0),
+    0,
+  );
+
+  const safetyAlert = getSafetyAlert(thymia.safety);
+  const confidencePct = toPercent(confidenceRaw);
+  const stressPct = toPercent(stressRaw);
+  const fatiguePct = toPercent(fatigueRaw);
+  const distressPct = toPercent(distressRaw);
+
+  const hasSignals =
+    confidencePct !== null ||
+    stressPct !== null ||
+    fatiguePct !== null ||
+    distressPct !== null ||
+    speechSeconds > 0;
+  if (!hasSignals) return undefined;
+
+  const summaryParts = [
+    confidencePct !== null ? `confidence ${confidencePct}%` : null,
+    stressPct !== null ? `stress ${stressPct}%` : null,
+    fatiguePct !== null ? `fatigue ${fatiguePct}%` : null,
+    distressPct !== null ? `distress ${distressPct}%` : null,
+    speechSeconds > 0 ? `${Math.round(speechSeconds)}s analyzed` : null,
+  ].filter(Boolean);
+
+  return {
+    confidencePct,
+    stressPct,
+    fatiguePct,
+    distressPct,
+    safetyAlert,
+    speechSeconds,
+    triggerSeconds,
+    summary:
+      summaryParts.length > 0
+        ? `Thymia detected ${summaryParts.join(", ")}.`
+        : "Thymia is enabled but no assessment data was received yet.",
+  };
+}
+
+function findValue(
+  sources: Array<Record<string, number | null> | undefined>,
+  keys: string[],
+): number | null {
+  for (const source of sources) {
+    if (!source) continue;
+    for (const key of keys) {
+      const value = source[key];
+      if (typeof value === "number" && Number.isFinite(value)) return value;
+    }
+  }
+  return null;
+}
+
+function invertScale(value: number | null): number | null {
+  if (value === null) return null;
+  return 1 - value;
+}
+
+function toPercent(value: number | null): number | null {
+  if (value === null) return null;
+  return Math.round(Math.max(0, Math.min(1, value)) * 100);
+}
+
+function formatPercent(value: number | null): string {
+  return value === null ? "N/A" : `${value}%`;
+}
+
+function getSafetyAlert(safety: Record<string, unknown>): string | null {
+  if (!safety || Object.keys(safety).length === 0) return null;
+  const raw = safety.alert;
+  if (typeof raw === "string") return raw;
+  if (typeof raw === "boolean") return raw ? "monitor" : "none";
+  return null;
 }
 
 function wordCount(value: string): number {

@@ -291,16 +291,33 @@ export function useAgoraVideoClient() {
           config.uid,
         );
 
-        // Create and publish audio track
-        const audioTrack = await AgoraRTC.createMicrophoneAudioTrack({
-          encoderConfig: "high_quality_stereo",
-          AEC: true,
-          ANS: true,
-          AGC: true,
-          ...(config.microphoneId
-            ? { microphoneId: config.microphoneId }
-            : {}),
-        });
+        // Create and publish audio track.
+        // If a persisted device ID is stale (common after device reconnect),
+        // retry with the system default microphone.
+        let audioTrack: IMicrophoneAudioTrack;
+        try {
+          audioTrack = await AgoraRTC.createMicrophoneAudioTrack({
+            encoderConfig: "high_quality_stereo",
+            AEC: true,
+            ANS: true,
+            AGC: true,
+            ...(config.microphoneId
+              ? { microphoneId: config.microphoneId }
+              : {}),
+          });
+        } catch (error) {
+          if (!config.microphoneId) throw error;
+          console.warn(
+            "Selected microphone unavailable, retrying with default device:",
+            config.microphoneId,
+          );
+          audioTrack = await AgoraRTC.createMicrophoneAudioTrack({
+            encoderConfig: "high_quality_stereo",
+            AEC: true,
+            ANS: true,
+            AGC: true,
+          });
+        }
         await rtcClient.publish([audioTrack]);
 
         // Subscribe to AI messages on the channel
