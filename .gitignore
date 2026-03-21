@@ -1,0 +1,16 @@
+# Package tarballs
+*.tgz
+
+# npm
+package-lock.json
+
+# Thymia/Shen variants (just .env config on base clients)
+react-video-client-thymia/
+react-voice-client-thymia/
+
+# Local secrets and virtual environments
+simple-backend/.env
+simple-backend/venv/
+
+# macOS metadata
+.DS_Store
