@@ -263,8 +263,9 @@ def start_agent():
     # Send agent to channel
     agent_response = send_agent_to_channel(channel, agent_payload, constants)
 
-    # Register agent_id with custom LLM (non-blocking)
-    if agent_response.get("success"):
+    # Register agent_id with custom LLM (non-blocking, only for custom vendor)
+    llm_vendor = (query_params.get('llm_vendor') or constants.get("LLM_VENDOR") or "").strip().lower()
+    if agent_response.get("success") and llm_vendor == "custom":
         try:
             resp_body = json.loads(agent_response.get("response", "{}"))
             agent_id = resp_body.get("agent_id")

@@ -239,9 +239,10 @@ const KNOWLEDGE_PACKS: KnowledgePack[] = [
 
 const KNOWLEDGE_THEMES = [
   "Daily Life",
+  "Ordering in a Restaurant",
+  "Shopping",
   "Travel",
   "Work and Meetings",
-  "Social Conversation",
 ];
 
 const LEARNING_FOCUS_PRIMARY_OPTIONS = [
@@ -297,6 +298,7 @@ export function VideoAvatarClient() {
   const [tutorReport, setTutorReport] = useState<TutorReport | null>(null);
   const [reportCopied, setReportCopied] = useState(false);
   const [showTutorReport, setShowTutorReport] = useState(false);
+  const [isEndingCall, setIsEndingCall] = useState(false);
   const [learningTheme, setLearningTheme] = useState(KNOWLEDGE_THEMES[0]);
   const [learningFocus, setLearningFocus] = useState(
     LEARNING_FOCUS_PRIMARY_OPTIONS[0],
@@ -493,7 +495,7 @@ export function VideoAvatarClient() {
   );
 
   const handleStart = async () => {
-    if (isStartingRef.current || isConnected || isLoading) return;
+    if (isStartingRef.current || isConnected || isLoading || isEndingCall) return;
     isStartingRef.current = true;
     setIsLoading(true);
     setReportCopied(false);
@@ -611,6 +613,9 @@ export function VideoAvatarClient() {
   };
 
   const handleStop = async () => {
+    if (isEndingCall) return;
+    setIsEndingCall(true);
+
     const transcript: ConversationMessage[] = [...messageList];
     if (currentInProgressMessage?.text?.trim()) {
       transcript.push({
@@ -626,15 +631,10 @@ export function VideoAvatarClient() {
       progress: thymiaProgress,
       safety: thymiaSafety,
     };
-    const generatedReport =
-      (await requestTutorReportFromBackend(transcript, thymiaSnapshot)) ||
-      buildTutorReport(
-        transcript,
-        isAgentMessage,
-        thymiaSnapshot,
-        THYMIA_ENABLED,
-      );
-    setTutorReport(generatedReport);
+    const localReport =
+      buildTutorReport(transcript, isAgentMessage, thymiaSnapshot, THYMIA_ENABLED) ||
+      buildFallbackTutorReport(transcript, isAgentMessage);
+    setTutorReport(localReport);
     setReportCopied(false);
     setShowTutorReport(true);
 
@@ -645,19 +645,43 @@ export function VideoAvatarClient() {
       setLocalVideoTrack(null);
       setIsLocalVideoActive(false);
     }
-    await leaveChannel();
     setSessionAgentId(null);
     setSessionPayload(null);
-    if (generatedReport && typeof window !== "undefined") {
+    if (typeof window !== "undefined") {
       window.sessionStorage.setItem(
         "last_avatar_call_report",
-        JSON.stringify(generatedReport),
+        JSON.stringify(localReport),
       );
     }
     if (returnUrl) {
       window.location.href = returnUrl;
       return;
     }
+
+    // Upgrade report with backend LLM assessment when available.
+    void requestTutorReportFromBackend(transcript, thymiaSnapshot)
+      .then((backendReport) => {
+        if (!backendReport) return;
+        setTutorReport(backendReport);
+        if (typeof window !== "undefined") {
+          window.sessionStorage.setItem(
+            "last_avatar_call_report",
+            JSON.stringify(backendReport),
+          );
+        }
+      })
+      .catch((err) => {
+        console.error("Backend report generation failed:", err);
+      });
+
+    // Complete channel leave in background so UI transitions instantly.
+    void leaveChannel()
+      .catch((err) => {
+        console.error("Failed to leave channel cleanly:", err);
+      })
+      .finally(() => {
+        setIsEndingCall(false);
+      });
   };
 
   const requestTutorReportFromBackend = async (
@@ -806,6 +830,8 @@ export function VideoAvatarClient() {
     setReportCopied(true);
   };
 
+  const isSessionActive = isConnected && !isEndingCall;
+
   return (
     <div className="flex h-screen flex-col bg-[#f6f6fb] overflow-hidden">
       {/* Header */}
@@ -834,7 +860,7 @@ export function VideoAvatarClient() {
 
       {/* Main Content */}
       <main className="flex flex-1 px-4 py-1 md:py-6 min-h-0 overflow-hidden min-w-0">
-        {!isConnected ? (
+        {!isSessionActive ? (
           showTutorReport && tutorReport ? (
             <div className="flex flex-1 justify-center overflow-auto">
               <div className="w-full max-w-5xl rounded-lg border bg-card p-6 shadow-lg space-y-6">
@@ -855,7 +881,7 @@ export function VideoAvatarClient() {
                     </button>
                     <button
                       onClick={() => setShowTutorReport(false)}
-                      className="cursor-pointer rounded-md border px-3 py-2 text-sm hover:bg-accent"
+                      className="cursor-pointer rounded-md bg-[#ff2f92] px-3 py-2 text-sm font-semibold text-white hover:bg-[#e32a83]"
                     >
                       Back
                     </button>
@@ -967,15 +993,6 @@ export function VideoAvatarClient() {
                   </section>
                 </div>
 
-                <div className="pt-2">
-                  <button
-                    onClick={handleStart}
-                    disabled={isLoading}
-                    className="cursor-pointer rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-                  >
-                    Start New Call
-                  </button>
-                </div>
               </div>
             </div>
           ) : (
@@ -1181,12 +1198,12 @@ export function VideoAvatarClient() {
                         onChange={(e) => setChatMessage(e.target.value)}
                         onKeyPress={handleKeyPress}
                         placeholder="Type a message"
-                        disabled={!isConnected}
+                        disabled={!isSessionActive}
                         className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
                       />
                       <button
                         onClick={handleSendMessage}
-                        disabled={!isConnected || !chatMessage.trim()}
+                        disabled={!isSessionActive || !chatMessage.trim()}
                         className="cursor-pointer h-10 w-10 flex items-center justify-center rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
                       >
                         <SendHorizontal className="h-4 w-4" />
@@ -1303,6 +1320,7 @@ export function VideoAvatarClient() {
                       </IconButton>
                       <button
                         onClick={handleStop}
+                        disabled={isEndingCall}
                         className="cursor-pointer flex items-center gap-2 rounded-lg bg-destructive px-5 py-2.5 text-sm font-medium text-destructive-foreground hover:bg-destructive/90"
                       >
                         <PhoneOff className="h-4 w-4" />
@@ -1459,12 +1477,12 @@ export function VideoAvatarClient() {
                                 onChange={(e) => setChatMessage(e.target.value)}
                                 onKeyPress={handleKeyPress}
                                 placeholder="Type a message"
-                                disabled={!isConnected}
+                                disabled={!isSessionActive}
                                 className="flex-1 rounded-md border border-input bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
                               />
                               <button
                                 onClick={handleSendMessage}
-                                disabled={!isConnected || !chatMessage.trim()}
+                                disabled={!isSessionActive || !chatMessage.trim()}
                                 className="cursor-pointer h-10 w-10 flex items-center justify-center rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
                               >
                                 <SendHorizontal className="h-4 w-4" />
@@ -1549,6 +1567,7 @@ export function VideoAvatarClient() {
                 </IconButton>
                 <button
                   onClick={handleStop}
+                  disabled={isEndingCall}
                   className="cursor-pointer flex items-center gap-2 rounded-lg bg-destructive px-4 py-2 text-sm font-medium text-destructive-foreground hover:bg-destructive/90 min-h-[44px]"
                 >
                   <PhoneOff className="h-4 w-4" />
@@ -1744,6 +1763,68 @@ function buildTutorReport(
     nextSessionGoals,
     evidence,
     thymiaInsights,
+  };
+}
+
+function buildFallbackTutorReport(
+  messages: ConversationMessage[],
+  isAgentMessage: (uid: string) => boolean,
+): TutorReport {
+  const cleaned = messages
+    .map((m) => ({ ...m, text: (m.text || "").trim() }))
+    .filter((m) => m.text.length > 0);
+  const userMessages = cleaned.filter((m) => !isAgentMessage(m.uid));
+  const agentMessages = cleaned.filter((m) => isAgentMessage(m.uid));
+  const timestamps = cleaned
+    .map((m) => m.timestamp)
+    .filter((ts): ts is number => typeof ts === "number");
+  const durationMs =
+    timestamps.length >= 2 ? Math.max(...timestamps) - Math.min(...timestamps) : 0;
+
+  return {
+    generatedAt: new Date().toLocaleString(),
+    overview:
+      "Session ended before enough speech was captured for a full report.",
+    turns: cleaned.length,
+    userMessages: userMessages.length,
+    agentMessages: agentMessages.length,
+    duration: formatDuration(durationMs),
+    metrics: [
+      {
+        name: "Engagement",
+        score: 0,
+        rationale: "Not enough learner speech captured for scoring.",
+      },
+      {
+        name: "Clarity",
+        score: 0,
+        rationale: "Not enough learner speech captured for scoring.",
+      },
+      {
+        name: "Conversation Flow",
+        score: 0,
+        rationale: "Not enough turns captured for scoring.",
+      },
+      {
+        name: "Speaking Confidence",
+        score: 0,
+        rationale: "No confidence score can be computed without learner speech.",
+      },
+    ],
+    whatWentWell: ["Call connected and interaction data was captured."],
+    improvements: [
+      "Speak for at least 3-5 learner turns to generate full tutor scoring.",
+    ],
+    nextSessionGoals: [
+      "Use complete short sentences in each turn.",
+      "Use at least three target words naturally.",
+      "Keep the conversation going for at least one minute.",
+    ],
+    evidence: [
+      `Captured turns: ${cleaned.length}`,
+      `Captured user turns: ${userMessages.length}`,
+      `Captured agent turns: ${agentMessages.length}`,
+    ],
   };
 }
 
