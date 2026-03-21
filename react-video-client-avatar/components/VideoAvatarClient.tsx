@@ -24,7 +24,6 @@ import { ShenPanel } from "@agora/agent-ui-kit";
 import { ThymiaPanel, useThymia } from "@agora/agent-ui-kit/thymia";
 import { useShenai } from "@/hooks/useShenai";
 import AgoraRTC from "agora-rtc-sdk-ng";
-import { cn } from "@/lib/utils";
 import { ThemeToggle } from "./ThemeToggle";
 
 const DEFAULT_BACKEND_URL =
@@ -91,6 +90,196 @@ type ThymiaSnapshot = {
   safety: Record<string, unknown>;
 };
 
+type KnowledgePack = {
+  id: string;
+  label: string;
+  level: string;
+  useCase: string;
+  words: string[];
+};
+
+const KNOWLEDGE_PACKS: KnowledgePack[] = [
+  {
+    id: "top_100_frequent_en",
+    label: "Top 100 Frequent English Words",
+    level: "A1",
+    useCase: "general",
+    words: [
+      "the",
+      "be",
+      "to",
+      "of",
+      "and",
+      "a",
+      "in",
+      "that",
+      "have",
+      "i",
+      "it",
+      "for",
+      "not",
+      "on",
+      "with",
+      "he",
+      "as",
+      "you",
+      "do",
+      "at",
+      "this",
+      "but",
+      "his",
+      "by",
+      "from",
+      "they",
+      "we",
+      "say",
+      "her",
+      "she",
+      "or",
+      "an",
+      "will",
+      "my",
+      "one",
+      "all",
+      "would",
+      "there",
+      "their",
+      "what",
+      "so",
+      "up",
+      "out",
+      "if",
+      "about",
+      "who",
+      "get",
+      "which",
+      "go",
+      "me",
+      "when",
+      "make",
+      "can",
+      "like",
+      "time",
+      "no",
+      "just",
+      "him",
+      "know",
+      "take",
+      "people",
+      "into",
+      "year",
+      "your",
+      "good",
+      "some",
+      "could",
+      "them",
+      "see",
+      "other",
+      "than",
+      "then",
+      "now",
+      "look",
+      "only",
+      "come",
+      "its",
+      "over",
+      "think",
+      "also",
+      "back",
+      "after",
+      "use",
+      "two",
+      "how",
+      "our",
+      "work",
+      "first",
+      "well",
+      "way",
+      "even",
+      "new",
+      "want",
+      "because",
+      "any",
+      "these",
+      "give",
+      "day",
+      "most",
+      "us",
+    ],
+  },
+  {
+    id: "from_last_session_with_tutor_en",
+    label: "From Last Tutor Session",
+    level: "A1-A2",
+    useCase: "tutor",
+    words: [
+      "schedule",
+      "meeting",
+      "project",
+      "deadline",
+      "practice",
+      "mistake",
+      "improve",
+      "repeat",
+      "pronunciation",
+      "example",
+      "question",
+      "answer",
+      "explain",
+      "understand",
+      "remember",
+      "yesterday",
+      "today",
+      "tomorrow",
+      "week",
+      "goal",
+    ],
+  },
+  {
+    id: "suggested_by_tutor_en",
+    label: "Suggested By Tutor",
+    level: "A2",
+    useCase: "tutor",
+    words: [
+      "confident",
+      "clearly",
+      "describe",
+      "compare",
+      "opinion",
+      "advantage",
+      "challenge",
+      "solution",
+      "decide",
+      "prepare",
+      "review",
+      "feedback",
+      "conversation",
+      "situation",
+      "respond",
+      "detail",
+      "natural",
+      "fluency",
+      "connect",
+      "progress",
+    ],
+  },
+];
+
+const KNOWLEDGE_THEMES = [
+  "Daily Life",
+  "Travel",
+  "Work and Meetings",
+  "Social Conversation",
+];
+
+const LEARNING_FOCUS_OPTIONS = [
+  "Practice my knowledge",
+  "Increase vocabulary range",
+  "Reinforce vocabulary",
+  "Improve pronunciation and clarity",
+  "Build conversation confidence",
+];
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function redactSensitiveFields(obj: any): any {
   if (typeof obj !== "object" || obj === null) return obj;
@@ -120,7 +309,6 @@ export function VideoAvatarClient() {
   const [greeting, setGreeting] = useState("");
   const [activeTab, setActiveTab] = useState("video");
   const _conversationRef = useRef<HTMLDivElement>(null);
-  const [autoConnect, setAutoConnect] = useState(true);
   const [returnUrl, setReturnUrl] = useState<string | null>(null);
   const channelRef = useRef<string | null>(null);
   const [selectedMic, setSelectedMic] = useState(() =>
@@ -133,6 +321,15 @@ export function VideoAvatarClient() {
   const [tutorReport, setTutorReport] = useState<TutorReport | null>(null);
   const [reportCopied, setReportCopied] = useState(false);
   const [showTutorReport, setShowTutorReport] = useState(false);
+  const [learningTheme, setLearningTheme] = useState(KNOWLEDGE_THEMES[0]);
+  const [learningFocus, setLearningFocus] = useState(
+    LEARNING_FOCUS_OPTIONS[0],
+  );
+  const [selectedKnowledgePackId, setSelectedKnowledgePackId] = useState(
+    KNOWLEDGE_PACKS[0].id,
+  );
+  const [customKnownWords, setCustomKnownWords] = useState("");
+  const [targetWordsInput, setTargetWordsInput] = useState("");
   const isStartingRef = useRef(false);
 
   // Read URL parameters on mount
@@ -259,6 +456,33 @@ export function VideoAvatarClient() {
   const [localVideoTrack, setLocalVideoTrack] = useState<any>(null);
   const [isLocalVideoActive, setIsLocalVideoActive] = useState(false);
 
+  const selectedKnowledgePack = useMemo(
+    () =>
+      KNOWLEDGE_PACKS.find((pack) => pack.id === selectedKnowledgePackId) ||
+      KNOWLEDGE_PACKS[0],
+    [selectedKnowledgePackId],
+  );
+
+  const knowledgeWords = useMemo(() => {
+    const customWords = customKnownWords
+      .split(/[\s,]+/)
+      .map((word) => word.trim().toLowerCase())
+      .filter(Boolean);
+    const merged = [...selectedKnowledgePack.words, ...customWords];
+    return Array.from(new Set(merged)).slice(0, 30);
+  }, [selectedKnowledgePack.words, customKnownWords]);
+
+  const targetWords = useMemo(() => {
+    const manual = targetWordsInput
+      .split(/[\s,]+/)
+      .map((word) => word.trim().toLowerCase())
+      .filter(Boolean);
+    if (manual.length > 0) {
+      return Array.from(new Set(manual)).slice(0, 8);
+    }
+    return knowledgeWords.slice(0, 5);
+  }, [knowledgeWords, targetWordsInput]);
+
   const handleStart = async () => {
     if (isStartingRef.current || isConnected || isLoading) return;
     isStartingRef.current = true;
@@ -276,10 +500,18 @@ export function VideoAvatarClient() {
       params.append("enable_aivad", enableAivad.toString());
       params.append("asr_language", language);
 
-      // Add prompt and greeting if provided
-      if (prompt.trim()) {
-        params.append("prompt", prompt.trim());
-      }
+      // Inject knowledge-base context from the session setup.
+      const knowledgePrompt = buildKnowledgePrompt({
+        learnerLevel: "A1",
+        learningTheme,
+        learningFocus,
+        knownWords: knowledgeWords,
+        targetWords,
+      });
+      const finalPrompt = prompt.trim()
+        ? `${prompt.trim()}\n\n${knowledgePrompt}`
+        : knowledgePrompt;
+      params.append("prompt", finalPrompt);
       if (greeting.trim()) {
         params.append("greeting", greeting.trim());
       }
@@ -368,14 +600,6 @@ export function VideoAvatarClient() {
       isStartingRef.current = false;
     }
   };
-
-  // Auto-connect after state is committed
-  useEffect(() => {
-    if (autoConnect) {
-      setAutoConnect(false);
-      handleStart();
-    }
-  }, [autoConnect]);
 
   const handleStop = async () => {
     const transcript: ConversationMessage[] = [...messageList];
@@ -576,17 +800,17 @@ export function VideoAvatarClient() {
   return (
     <div className="flex h-screen flex-col bg-[#f6f6fb] overflow-hidden">
       {/* Header */}
-      <header className="flex-shrink-0 px-4 py-3 md:py-4 border-b border-[#ececf4] bg-white/90 backdrop-blur-sm">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-lg md:text-xl font-bold flex items-center gap-2 text-[#161622]">
-              <span>LexiCoach</span>
+      <header className="flex-shrink-0 border-b border-[#ececf4] bg-white/90 px-4 py-3 backdrop-blur-sm md:py-4">
+        <div className="flex items-start justify-between">
+          <div className="flex flex-col justify-center">
+            <h1 className="text-xl font-bold leading-none text-[#161622] md:text-2xl">
+              LexiCoach
             </h1>
-            <p className="text-xs md:text-sm text-[#696978] ml-10">
+            <p className="pt-1 text-xs text-[#696978] md:text-sm">
               Your speaking tutor with confidence coaching
             </p>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 self-start">
             <ThemeToggle />
             <button
               onClick={() => setIsSettingsOpen(!isSettingsOpen)}
@@ -747,39 +971,113 @@ export function VideoAvatarClient() {
             </div>
           ) : (
             <div className="flex flex-1 items-center justify-center">
-              {autoConnect || isLoading ? (
-                <div className="rounded-2xl border border-[#ececf4] bg-white px-8 py-6 shadow-sm text-center">
-                  <p className="text-base font-medium text-[#272738]">
-                    Starting your LexiCoach session...
+              <div className="w-full max-w-3xl rounded-2xl border border-[#ececf4] bg-white px-6 py-6 shadow-sm">
+                <h2 className="text-xl font-semibold text-[#272738]">
+                  Prepare Your Practice Session
+                </h2>
+                <p className="mt-1 text-sm text-[#6d6d80]">
+                  Set your learning focus, then start only when you are ready.
+                </p>
+
+                <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <label className="space-y-1 text-sm md:col-span-2">
+                    <span className="text-[#55556a]">Knowledge Base Pack</span>
+                    <select
+                      value={selectedKnowledgePackId}
+                      onChange={(e) => setSelectedKnowledgePackId(e.target.value)}
+                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    >
+                      {KNOWLEDGE_PACKS.map((pack) => (
+                        <option key={pack.id} value={pack.id}>
+                          {pack.label} ({pack.level})
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="space-y-1 text-sm md:col-span-2">
+                    <span className="text-[#55556a]">Learning Focus</span>
+                    <select
+                      value={learningFocus}
+                      onChange={(e) => setLearningFocus(e.target.value)}
+                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    >
+                      {LEARNING_FOCUS_OPTIONS.map((focus) => (
+                        <option key={focus} value={focus}>
+                          {focus}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="space-y-1 text-sm md:col-span-2">
+                    <span className="text-[#55556a]">Theme</span>
+                    <select
+                      value={learningTheme}
+                      onChange={(e) => setLearningTheme(e.target.value)}
+                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    >
+                      {KNOWLEDGE_THEMES.map((theme) => (
+                        <option key={theme} value={theme}>
+                          {theme}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="space-y-1 text-sm md:col-span-2">
+                    <span className="text-[#55556a]">
+                      Add Custom Known Words (optional)
+                    </span>
+                    <input
+                      type="text"
+                      value={customKnownWords}
+                      onChange={(e) => setCustomKnownWords(e.target.value)}
+                      placeholder="ex: interview, teamwork, confident"
+                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    />
+                  </label>
+
+                  <label className="space-y-1 text-sm md:col-span-2">
+                    <span className="text-[#55556a]">
+                      Target Words (optional, comma-separated)
+                    </span>
+                    <input
+                      type="text"
+                      value={targetWordsInput}
+                      onChange={(e) => setTargetWordsInput(e.target.value)}
+                      placeholder="ex: confident, explain, progress"
+                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    />
+                  </label>
+                </div>
+
+                <div className="mt-5 rounded-lg border bg-[#fafafe] p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-[#77778c]">
+                    Active Knowledge Base ({knowledgeWords.length} words)
                   </p>
-                  <p className="mt-2 text-sm text-[#6d6d80] animate-pulse">
-                    Connecting to {backendUrl} with profile {profile}
+                  <p className="mt-2 text-sm text-[#55556a]">
+                    {knowledgeWords.slice(0, 14).join(", ")}
+                    {knowledgeWords.length > 14 ? ", ..." : ""}
+                  </p>
+                  <p className="mt-2 text-xs text-[#77778c]">
+                    Target words for prompt: {targetWords.join(", ")}
                   </p>
                 </div>
-              ) : (
-                <div className="rounded-2xl border border-[#ececf4] bg-white px-8 py-6 shadow-sm text-center">
-                  <p className="text-sm text-[#6d6d80]">
-                    Session disconnected.
-                  </p>
+
+                <div className="mt-5 flex items-center gap-3">
                   <button
                     onClick={handleStart}
                     disabled={isLoading}
-                    className="mt-3 cursor-pointer rounded-xl bg-[#ff2f92] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#e32a83] disabled:opacity-50 shadow-[0_10px_24px_rgba(255,47,146,0.3)]"
+                    className="cursor-pointer rounded-xl bg-[#ff2f92] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#e32a83] disabled:opacity-50 shadow-[0_10px_24px_rgba(255,47,146,0.3)]"
                   >
-                    Reconnect
+                    {isLoading ? "Starting..." : "Practice Speaking"}
                   </button>
-                  {tutorReport && (
-                    <div className="mt-4">
-                      <button
-                        onClick={() => setShowTutorReport(true)}
-                        className="cursor-pointer rounded-md border border-[#e7b8d1] px-3 py-2 text-sm hover:bg-[#ffe7f4] text-[#7a2d5a]"
-                      >
-                        Open Tutor Report
-                      </button>
-                    </div>
-                  )}
+                  <p className="text-xs text-[#77778c]">
+                    Backend: {backendUrl} • Profile: {profile}
+                  </p>
                 </div>
-              )}
+              </div>
             </div>
           )
         ) : (
@@ -1586,4 +1884,35 @@ function countUniqueTerms(values: string[]): number {
 
 function scoreClamp(value: number): number {
   return Math.max(1, Math.min(10, Math.round(value)));
+}
+
+function buildKnowledgePrompt({
+  learnerLevel,
+  learningTheme,
+  learningFocus,
+  knownWords,
+  targetWords,
+}: {
+  learnerLevel: string;
+  learningTheme: string;
+  learningFocus: string;
+  knownWords: string[];
+  targetWords: string[];
+}): string {
+  return [
+    "You are LexiCoach, a supportive speaking tutor for language learners.",
+    `Learner CEFR level: ${learnerLevel}.`,
+    `Conversation theme: ${learningTheme}.`,
+    `Learning focus: ${learningFocus}.`,
+    `Learner known vocabulary: ${knownWords.join(", ")}.`,
+    `Target words for this session: ${targetWords.join(", ")}.`,
+    "At the beginning, say exactly:",
+    `Theme: ${learningTheme}`,
+    `Target words: ${targetWords.join(", ")}`,
+    "Keep responses concise and natural.",
+    "Encourage the learner to use the target words in context.",
+    'When a target word is correct, say: Great use of "<word>".',
+    'When incorrect, say: Try again with "<word>", then ask a follow-up question.',
+    "End when all target words have been used correctly at least once.",
+  ].join("\n");
 }
