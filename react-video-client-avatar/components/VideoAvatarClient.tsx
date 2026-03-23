@@ -90,6 +90,13 @@ type ThymiaSnapshot = {
   safety: Record<string, unknown>;
 };
 
+const REQUIRED_METRIC_NAMES = [
+  "Engagement",
+  "Clarity",
+  "Conversation Flow",
+  "Speaking Confidence",
+];
+
 type KnowledgePack = {
   id: string;
   label: string;
@@ -658,21 +665,7 @@ export function VideoAvatarClient() {
       return;
     }
 
-    // Upgrade report with backend LLM assessment when available.
-    void requestTutorReportFromBackend(transcript, thymiaSnapshot)
-      .then((backendReport) => {
-        if (!backendReport) return;
-        setTutorReport(backendReport);
-        if (typeof window !== "undefined") {
-          window.sessionStorage.setItem(
-            "last_avatar_call_report",
-            JSON.stringify(backendReport),
-          );
-        }
-      })
-      .catch((err) => {
-        console.error("Backend report generation failed:", err);
-      });
+    // Keep report deterministic for demo: do not asynchronously replace it later.
 
     // Complete channel leave in background so UI transitions instantly.
     void leaveChannel()
@@ -708,7 +701,7 @@ export function VideoAvatarClient() {
       const report = await response.json();
       const thymiaInsights = buildThymiaInsights(thymiaSnapshot, THYMIA_ENABLED);
 
-      return {
+      return normalizeTutorReport({
         generatedAt: report.generatedAt || new Date().toLocaleString(),
         overview: report.overview || "No overview provided.",
         turns: Number(report.turns || 0),
@@ -727,7 +720,7 @@ export function VideoAvatarClient() {
           : [],
         evidence: Array.isArray(report.evidence) ? report.evidence : [],
         thymiaInsights,
-      };
+      });
     } catch (error) {
       console.warn(
         "Falling back to local report generation:",
@@ -832,8 +825,14 @@ export function VideoAvatarClient() {
 
   const isSessionActive = isConnected && !isEndingCall;
 
+  const isReportView = !isSessionActive && showTutorReport && !!tutorReport;
+
   return (
-    <div className="flex h-screen flex-col bg-[#f6f6fb] overflow-hidden">
+    <div
+      className={`flex flex-col bg-[#f6f6fb] ${
+        isReportView ? "min-h-screen" : "h-screen overflow-hidden"
+      }`}
+    >
       {/* Header */}
       <header className="flex-shrink-0 border-b border-[#ececf4] bg-white/90 px-4 py-3 backdrop-blur-sm md:py-4">
         <div className="flex items-start justify-between">
@@ -859,20 +858,26 @@ export function VideoAvatarClient() {
       </header>
 
       {/* Main Content */}
-      <main className="flex flex-1 px-4 py-1 md:py-6 min-h-0 overflow-hidden min-w-0">
+      <main
+        className={`flex flex-1 min-w-0 px-4 py-1 md:py-6 ${
+          isReportView ? "overflow-visible" : "min-h-0 overflow-hidden"
+        }`}
+      >
         {!isSessionActive ? (
           showTutorReport && tutorReport ? (
-            <div className="flex flex-1 justify-center overflow-auto">
+            <div className="flex flex-1 justify-center pb-10">
               <div className="w-full max-w-5xl rounded-lg border bg-card p-6 shadow-lg space-y-6">
-                <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="flex flex-col gap-3 border-b pb-4 md:flex-row md:items-start md:justify-between">
                   <div>
-                    <h2 className="text-2xl font-semibold">Tutor Report</h2>
-                    <p className="text-sm text-muted-foreground">
+                    <h2 className="text-xl font-semibold leading-tight md:text-2xl">
+                      Tutor Report
+                    </h2>
+                    <p className="mt-1 text-sm text-muted-foreground">
                       {tutorReport.generatedAt} • {tutorReport.duration} •{" "}
                       {tutorReport.turns} turns
                     </p>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2 md:justify-end">
                     <button
                       onClick={copyTutorReport}
                       className="cursor-pointer rounded-md border px-3 py-2 text-sm hover:bg-accent"
@@ -938,9 +943,12 @@ export function VideoAvatarClient() {
                   </div>
                 )}
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2 md:auto-rows-fr">
                   {tutorReport.metrics.map((metric) => (
-                    <div key={metric.name} className="rounded-lg border p-4">
+                    <div
+                      key={metric.name}
+                      className="flex h-full min-h-[220px] flex-col rounded-lg border p-4"
+                    >
                       <p className="text-xs uppercase tracking-wide text-muted-foreground">
                         {metric.name}
                       </p>
@@ -948,7 +956,7 @@ export function VideoAvatarClient() {
                         {metric.score}
                         <span className="text-sm text-muted-foreground"> / 10</span>
                       </p>
-                      <p className="text-sm text-muted-foreground mt-2">
+                      <p className="mt-2 max-h-28 overflow-auto break-words pr-1 text-sm leading-relaxed text-muted-foreground">
                         {metric.rationale}
                       </p>
                     </div>
@@ -1781,7 +1789,7 @@ function buildFallbackTutorReport(
   const durationMs =
     timestamps.length >= 2 ? Math.max(...timestamps) - Math.min(...timestamps) : 0;
 
-  return {
+  return normalizeTutorReport({
     generatedAt: new Date().toLocaleString(),
     overview:
       "Session ended before enough speech was captured for a full report.",
@@ -1825,6 +1833,50 @@ function buildFallbackTutorReport(
       `Captured user turns: ${userMessages.length}`,
       `Captured agent turns: ${agentMessages.length}`,
     ],
+  });
+}
+
+function normalizeTutorReport(report: TutorReport): TutorReport {
+  const metricMap = new Map<string, AssessmentMetric>();
+  for (const metric of report.metrics || []) {
+    if (!metric?.name) continue;
+    metricMap.set(metric.name, {
+      name: metric.name,
+      score: Number.isFinite(metric.score) ? metric.score : 0,
+      rationale: metric.rationale || "No rationale provided.",
+    });
+  }
+
+  const metrics: AssessmentMetric[] = REQUIRED_METRIC_NAMES.map((name) => {
+    const found = metricMap.get(name);
+    return (
+      found || {
+        name,
+        score: 0,
+        rationale: "No data available for this metric.",
+      }
+    );
+  });
+
+  return {
+    ...report,
+    metrics,
+    whatWentWell:
+      report.whatWentWell && report.whatWentWell.length
+        ? report.whatWentWell
+        : ["No highlights captured for this session."],
+    improvements:
+      report.improvements && report.improvements.length
+        ? report.improvements
+        : ["Keep practicing with longer learner turns."],
+    nextSessionGoals:
+      report.nextSessionGoals && report.nextSessionGoals.length
+        ? report.nextSessionGoals
+        : ["Use complete responses and include target vocabulary."],
+    evidence:
+      report.evidence && report.evidence.length
+        ? report.evidence
+        : ["No detailed evidence was captured."],
   };
 }
 
